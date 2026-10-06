@@ -54,12 +54,12 @@ test("page 4 (ranks 46–60) reads API pages 1 and 2", async () => {
   assert.equal(calls.filter((c) => c.site).length, 2);
 });
 
-test("lines look like '1. Fealthy 2000'", () => {
+test("lines look like '` 1.` **Fealthy** — Grandmaster · **2000 Elo**'", () => {
   const lines = formatLines([
-    { rank: 1, name: "Fealthy", rating: 2000.4 },
-    { rank: 2, name: "Ipseity", rating: 1600 },
+    { rank: 1, name: "Fealthy", rating: 2000.4, tier: { label: "Grandmaster" } },
+    { rank: 10, name: "Ipse_ity", rating: 1600, tier: null },
   ]);
-  assert.deepEqual(lines, ["1.  Fealthy 2000", "2.  Ipseity 1600"]);
+  assert.deepEqual(lines, ["` 1.` **Fealthy** — Grandmaster · **2000 Elo**", "`10.` **Ipse\\_ity** — Unranked · **1600 Elo**"]);
 });
 
 test("buttons: EU default, NA switch, pages up to 5, ids unique", async () => {
@@ -67,7 +67,7 @@ test("buttons: EU default, NA switch, pages up to 5, ids unique", async () => {
   const { message } = await renderLeaderboard(new Site(ENV), undefined, undefined);
   const [regionRow, pageRow] = message.components;
   assert.match(message.embeds[0].title, /EU Leaderboard — Top 15/);
-  assert.match(message.embeds[0].description, /1\. {2}Fealthy/);
+  assert.match(message.embeds[0].description, /^` 1\.` \*\*Fealthy\*\*/);
   assert.equal(regionRow.components[0].disabled, true); // EU is current
   assert.equal(pageRow.components[0].disabled, true); // no Prev on page 1
   const ids = [...regionRow.components, ...pageRow.components].map((b) => b.custom_id);
@@ -77,7 +77,7 @@ test("buttons: EU default, NA switch, pages up to 5, ids unique", async () => {
 
   const last = await renderLeaderboard(new Site(ENV), "na", 5);
   assert.match(last.message.embeds[0].title, /NA Leaderboard — Top 75/);
-  assert.match(last.message.embeds[0].description, /^```\n61\./);
+  assert.match(last.message.embeds[0].description, /^`61\.`/);
   assert.equal(last.message.components[1].components[2].disabled, true); // no page 6
 });
 
@@ -85,7 +85,7 @@ test("Next is off when fewer players than the next page", async () => {
   installFetch({ boardTotal: 20 });
   const { message } = await renderLeaderboard(new Site(ENV), "eu", 2);
   assert.equal(message.components[1].components[2].disabled, true);
-  assert.equal(message.embeds[0].description.split("\n").length, 2 + 5); // ranks 16–20
+  assert.equal(message.embeds[0].description.split("\n").length, 5); // ranks 16–20
 });
 
 // ---------- the worker: signatures, commands, buttons ----------
@@ -198,7 +198,7 @@ test("/stats finds a typed name and shows the numbers", async () => {
   );
   await ctx.done();
   const embed = calls.find((c) => c.path?.endsWith("@original")).body.embeds[0];
-  assert.match(embed.title, /^Fealthy — 🇪🇺 EU/);
+  assert.match(embed.title, /^Fealthy — EU/);
   const field = (n) => embed.fields.find((f) => f.name === n)?.value;
   assert.equal(field("Rating"), "**2,000** · Grandmaster");
   assert.equal(field("Rank"), "#1");
