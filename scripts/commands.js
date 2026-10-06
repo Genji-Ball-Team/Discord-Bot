@@ -11,12 +11,7 @@ const region = (required) => ({
   ],
 });
 
-const DAY_CHOICES = ["today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((d) => ({
-  name: d[0].toUpperCase() + d.slice(1),
-  value: d,
-}));
-
-// /host, /setup and /leaderboard are staff-only: the bot checks for the STAFF_ROLE_ID role
+// /setup and /leaderboard are staff-only: the bot checks for the STAFF_ROLE_ID role
 // (src/index.js). Discord still lists them for everyone unless an admin hides them in
 // Server Settings → Integrations → the bot.
 
@@ -56,35 +51,6 @@ export const commands = [
             channel_types: [0, 5],
           },
         ],
-      },
-    ],
-  },
-  {
-    name: "host",
-    description: "Staff: tournament sign-ups",
-    dm_permission: false,
-    options: [
-      {
-        type: 1,
-        name: "tournament",
-        description: "Post a tournament sign-up players react to",
-        options: [
-          region(true),
-          { type: 3, name: "day", description: "The day it's on", required: true, choices: DAY_CHOICES },
-          {
-            type: 3,
-            name: "time",
-            description: "Start time in the region's time zone, like 21:00 or 9pm (default 21:00)",
-            required: false,
-          },
-          { type: 3, name: "name", description: "Tournament name (default: EU/NA Weekly Tournament)", required: false, max_length: 100 },
-        ],
-      },
-      {
-        type: 1,
-        name: "cancel",
-        description: "Cancel the next tournament in a region",
-        options: [region(true)],
       },
     ],
   },
