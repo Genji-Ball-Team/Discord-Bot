@@ -17,7 +17,8 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 ## How it works
 
 - **Interactions.** Discord sends slash commands, button presses and autocomplete to `POST /interactions`, signed with Ed25519 (`verifyRequest` in `src/discord.js`). Discord wants an answer within 3 seconds: anything that calls the site or Discord answers "deferred" at once and finishes in `ctx.waitUntil`, editing the reply (`src/index.js`).
-- **Cron.** Every minute: tournament sign-ups closing and their DMs (`src/tournament.js`), and every `LEADERBOARD_REFRESH_MINUTES` the live leaderboards.
+- **Cron.** Every minute: the tourney reminder DMs; every `TOURNEY_REFRESH_MINUTES` the tourney posts (`src/tourneys.js`); every `LEADERBOARD_REFRESH_MINUTES` the live leaderboards.
+- **Tourneys** live on the site (sign-ups by in-game name, lobbies, standings). The bot only announces them and keeps its posts in step, editing a post only when what it shows changed (`shown`). The 🔔 Remind me button is the one thing it stores about a tourney's players.
 - **The site.** Every number comes from genjiball.us's public API (`src/site.js`), documented in genjiball-ranked's [`docs/api.md`](https://github.com/Genji-Ball-Team/genjiball-ranked/blob/main/docs/api.md) ("Site"). The bot only reads it and has no token: it never changes the site.
 
 ## Limits
@@ -28,7 +29,7 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 
 ## Discord habits
 
-- **No pings unless meant.** Every message sets `allowed_mentions` (`NO_PINGS` by default). Only a sign-up post pings its region's role, and only the "couldn't DM" note pings the people in it.
+- **No pings unless meant.** Every message sets `allowed_mentions` (`NO_PINGS` by default). Only a new tourney's announcement pings its region's role, and only the "couldn't DM" note pings the people in it.
 - **Staff commands** are checked in the bot (`isStaff`: the `STAFF_ROLE_ID` role or Administrator), not only hidden in Discord's settings. Their replies are ephemeral.
 - **Regions.** EU and NA are separate everywhere, like on the site: a region option or button, never a mixed list.
 - Escape player names for markdown (`escapeMarkdown`) and keep messages under Discord's limits (2000 characters, 25 embed fields, 25 autocomplete choices).

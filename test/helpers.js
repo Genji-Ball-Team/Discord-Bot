@@ -22,11 +22,7 @@ export const ENV = {
   SITE_URL: "https://genjiball.us",
   EU_ROLE_ID: "role-eu",
   NA_ROLE_ID: "role-na",
-  EU_DEFAULT_TIME: "21:00",
-  EU_TIMEZONE: "Europe/Moscow",
-  NA_DEFAULT_TIME: "21:00",
-  NA_TIMEZONE: "America/New_York",
-  SIGNUP_EMOJI: "✅",
+  TOURNEY_CHANNEL_ID: "tourney-chan",
   REMINDER_MINUTES: "5",
 };
 
@@ -43,14 +39,32 @@ export function fakeLeaderboard(region, total = 80) {
   }));
 }
 
+/** A tourney as `GET /api/tourneys` lists it. */
+export function fakeTourney(over = {}) {
+  return {
+    id: 3,
+    name: "October Cup",
+    region: "eu",
+    startsAt: "2026-10-10T18:00:00Z",
+    status: "scheduled",
+    notes: null,
+    capacity: 20,
+    signups: { open: true, count: 4, full: false },
+    lobbies: [
+      { id: 1, label: "Lobby 1", capacity: 10, matchId: null, void: false, screenshot: null, screenshotExpired: false, verified: false, standings: [] },
+      { id: 2, label: "Lobby 2", capacity: 10, matchId: null, void: false, screenshot: null, screenshotExpired: false, verified: false, standings: [] },
+    ],
+    ...over,
+  };
+}
+
 /**
- * Installs a fake fetch. Discord calls are recorded in `calls`; `reactors` is who reacted to each
- * message; `closedDms` users answer 403 to a DM.
+ * Installs a fake fetch. Discord calls are recorded in `calls`; `closedDms` users answer 403 to a
+ * DM. `tourneys` is what `/api/tourneys` answers per region; change it between calls.
  */
-export function installFetch({ reactors = {}, closedDms = new Set(), boardTotal = 80 } = {}) {
+export function installFetch({ closedDms = new Set(), boardTotal = 80, tourneys = {} } = {}) {
   const calls = [];
   let nextId = 5000;
-  const dmChannels = new Map();
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url ?? String(input));
     const method = init.method ?? "GET";
@@ -65,6 +79,10 @@ export function installFetch({ reactors = {}, closedDms = new Set(), boardTotal 
         const all = fakeLeaderboard(region, boardTotal);
         const players = all.slice((page - 1) * 50, page * 50);
         return reply({ region, page, pageSize: 50, hasMore: all.length > page * 50, players });
+      }
+      if (url.pathname === "/api/tourneys") {
+        const { upcoming = [], past = [] } = tourneys[region] ?? {};
+        return reply({ region, page: 1, pageSize: 10, hasMore: false, upcoming, past });
       }
       if (url.pathname === "/api/players") {
         const q = url.searchParams.get("search").toLowerCase();
@@ -111,17 +129,7 @@ export function installFetch({ reactors = {}, closedDms = new Set(), boardTotal 
         return reply({ id: String(nextId++), channel_id: m[1], ...body });
       }
       if (method === "PATCH" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply({ id: "x", ...body });
-      if (method === "PUT" && /reactions\/.+\/@me$/.test(path)) return reply(null, 204);
-      if (method === "GET" && (m = /^\/channels\/[^/]+\/messages\/([^/]+)\/reactions\/(.+)$/.exec(path))) {
-        const users = reactors[m[1]] ?? [];
-        const after = url.searchParams.get("after");
-        const start = after ? users.findIndex((u) => u.id === after) + 1 : 0;
-        return reply(users.slice(start, start + 100));
-      }
-      if (method === "POST" && path === "/users/@me/channels") {
-        dmChannels.set(body.recipient_id, `dm-${body.recipient_id}`);
-        return reply({ id: `dm-${body.recipient_id}` });
-      }
+      if (method === "POST" && path === "/users/@me/channels") return reply({ id: `dm-${body.recipient_id}` });
       return reply({ message: "Unknown route " + method + " " + path }, 404);
     }
     throw new Error("Unexpected fetch " + url);

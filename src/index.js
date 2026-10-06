@@ -5,7 +5,7 @@ import { Discord, EPHEMERAL, InteractionType, ResponseType, verifyRequest } from
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { Site } from "./site.js";
 import { autocompletePlayers, renderStats } from "./stats.js";
-import { cancelTournament, hostTournament, runReminders } from "./tournament.js";
+import { sendReminders, syncTourneys, toggleReminder } from "./tourneys.js";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -34,6 +34,7 @@ export function optionsOf(data) {
 }
 
 const refreshMinutes = (env) => Math.max(1, Number(env.LEADERBOARD_REFRESH_MINUTES) || 5);
+const tourneyMinutes = (env) => Math.max(1, Number(env.TOURNEY_REFRESH_MINUTES) || 5);
 
 /**
  * /setup leaderboard: posts the live leaderboard in a channel, or refreshes the one already there.
@@ -73,7 +74,7 @@ async function failSoftly(discord, token, error) {
   await discord.editOriginal(token, { content: "Something went wrong talking to the site or Discord. Try again in a minute.", embeds: [], components: [] }).catch(() => null);
 }
 
-const STAFF_COMMANDS = new Set(["host", "setup", "leaderboard"]);
+const STAFF_COMMANDS = new Set(["setup", "leaderboard"]);
 const ADMINISTRATOR = 1n << 3n;
 
 /** Staff: has the STAFF_ROLE_ID role, or is a server admin (so the owner can't lock themselves out). */
@@ -91,7 +92,7 @@ export function isStaff(env, member) {
 async function handleCommand(env, ctx, interaction) {
   const discord = new Discord(env);
   const site = new Site(env);
-  const { sub, options } = optionsOf(interaction.data);
+  const { options } = optionsOf(interaction.data);
   const name = interaction.data.name;
 
   if (STAFF_COMMANDS.has(name)) {
@@ -145,26 +146,24 @@ async function handleCommand(env, ctx, interaction) {
   }
 
   if (name === "host") {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          const reply =
-            sub === "cancel"
-              ? await cancelTournament(env, discord, interaction, options)
-              : await hostTournament(env, discord, interaction, options);
-          await discord.editOriginal(interaction.token, { content: reply, allowed_mentions: { parse: [] } });
-        } catch (e) {
-          await failSoftly(discord, interaction.token, e);
-        }
-      })(),
-    );
-    return json({ type: ResponseType.DEFERRED_MESSAGE, data: { flags: EPHEMERAL } });
+    // The old /host sign-ups, until the commands are registered again without it.
+    const channel = (env.TOURNEY_CHANNEL_ID ?? "").trim();
+    const content =
+      `Tourneys are made on genjiball.us now, and players sign up there. Admins create them on the site's admin page; ` +
+      `I post each one${channel ? ` in <#${channel}>` : ""} with a 🔔 Remind me button.`;
+    return json({ type: ResponseType.MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
   }
 
   return json({ type: ResponseType.MESSAGE, data: { content: "I don't know that command.", flags: EPHEMERAL } });
 }
 
 async function handleButton(env, ctx, interaction) {
+  const remind = /^tr:(\d+)$/.exec(interaction.data.custom_id ?? "");
+  if (remind) {
+    // Only the bot's own D1: quick enough to answer straight away.
+    const content = await toggleReminder(env, new Site(env), interaction, Number(remind[1]));
+    return json({ type: ResponseType.MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
+  }
   const target = parseButton(interaction.data.custom_id);
   if (!target) return json({ type: ResponseType.DEFERRED_UPDATE });
   const discord = new Discord(env);
@@ -242,16 +241,18 @@ export default {
   async scheduled(event, env, ctx) {
     // The free plan allows 50 outgoing requests per run; keep a margin.
     const discord = new Discord(env, 45);
-    try {
-      await runReminders(env, discord, event.scheduledTime ?? Date.now());
-    } catch (e) {
-      console.error("reminders", e);
+    const site = new Site(env);
+    const budget = () => discord.left - site.calls;
+    const now = event.scheduledTime ?? Date.now();
+    await sendReminders(env, discord, site, budget, now).catch((e) => console.error("reminders", e));
+    const minute = new Date(now).getUTCMinutes();
+    if (minute % tourneyMinutes(env) === 0) {
+      // 2 site requests, then 1 Discord request per post that changed.
+      await syncTourneys(env, discord, site, budget).catch((e) => console.error("tourneys", e));
     }
-    const minute = new Date(event.scheduledTime ?? Date.now()).getUTCMinutes();
     if (minute % refreshMinutes(env) === 0) {
       // Each board costs up to 2 site requests and 1 Discord request, all inside the run's budget.
-      const site = new Site(env);
-      await refreshBoards(env, discord, site, () => discord.left - site.calls).catch((e) => console.error("boards", e));
+      await refreshBoards(env, discord, site, budget).catch((e) => console.error("boards", e));
     }
   },
 };
