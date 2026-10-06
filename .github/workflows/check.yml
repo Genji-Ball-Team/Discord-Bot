@@ -1,0 +1,26 @@
+name: Check
+
+# A PR's branch is checked by its pull_request run only; a push runs for main (the merge). A newer
+# commit on a branch cancels the older run, so a queue of stale runs doesn't hold up the newest.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test
+        run: npm test

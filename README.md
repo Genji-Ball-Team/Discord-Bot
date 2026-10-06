@@ -22,7 +22,7 @@ Discord still *lists* the staff commands for everyone. To hide them from non-sta
 
 ## Setup (about 20 minutes, once)
 
-You need: a Discord server you manage, the Cloudflare account genjiball.us is on (or any free one), and [Node.js](https://nodejs.org) (the LTS version) on your PC.
+You need: a Discord server you manage, the Genji Ball Cloudflare account, the one genjiball.us is on (check with `npx wrangler whoami`; never a personal account), and [Node.js](https://nodejs.org) (the LTS version) on your PC.
 
 ### 1. Make the Discord app
 
@@ -89,6 +89,7 @@ npm run deploy
 - Edit the code or `wrangler.toml`, then `npm run deploy`. `LEADERBOARD_REFRESH_MINUTES` sets how often the live board updates.
 - Changed `scripts/commands.js` (command names or options)? Also `npm run register`.
 - `npm test` runs the tests (needs Node 22.5 or newer).
+- Working on the code? Read [AGENTS.md](AGENTS.md), and open a PR with the template: CI runs `npm test` on it.
 
 ## Good to know
 
