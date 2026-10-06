@@ -371,6 +371,25 @@ test("Remind me toggles a DM; the DMs go out 5 minutes before, closed DMs named"
   assert.match((await answer("u5")).content, /already went out/);
 });
 
+test("a tourney moved after its reminders went out reminds again, except closed DMs", async () => {
+  const env = { ...ENV, DB: fakeD1() };
+  const tourneys = { eu: { upcoming: [fakeTourney()] } };
+  const calls = installFetch({ tourneys, closedDms: new Set(["u2"]) });
+  await sync(env);
+  for (const u of ["u1", "u2"]) await env.DB.prepare("INSERT INTO reminders (tourney_id, user_id, channel_id) VALUES (3, ?, 'tourney-chan')").bind(u).run();
+  await remind(env, START - 5 * 60_000);
+  assert.equal((await env.DB.prepare("SELECT reminded FROM tourneys").first()).reminded, 1);
+
+  const later = Date.parse("2026-10-10T20:00:00Z");
+  tourneys.eu.upcoming = [fakeTourney({ startsAt: "2026-10-10T20:00:00Z" })];
+  await sync(env);
+  assert.equal((await env.DB.prepare("SELECT reminded FROM tourneys").first()).reminded, 0);
+  const before = calls.filter((c) => c.path?.startsWith("/channels/dm-")).length;
+  await remind(env, later - 5 * 60_000);
+  const dms = calls.filter((c) => c.path?.startsWith("/channels/dm-")).slice(before);
+  assert.deepEqual(dms.map((d) => d.path), ["/channels/dm-u1/messages"]);
+});
+
 test("a big tourney's reminders spread over several cron runs", async () => {
   const env = { ...ENV, DB: fakeD1() };
   const calls = installFetch({ tourneys: { eu: { upcoming: [fakeTourney()] } } });

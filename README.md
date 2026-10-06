@@ -86,6 +86,7 @@ npm run deploy
 ## Changing things later
 
 - Edit the code or `wrangler.toml`, then `npm run deploy`. `LEADERBOARD_REFRESH_MINUTES` sets how often the live board updates.
+- Changed `schema.sql`? Run `npm run db:setup` **before** `npm run deploy`, so the new tables are there when the new code runs.
 - Changed `scripts/commands.js` (command names or options)? Also `npm run register`.
 - `npm test` runs the tests (needs Node 22.5 or newer).
 - Working on the code? Read [AGENTS.md](AGENTS.md), and open a PR with the template: CI runs `npm test` on it.

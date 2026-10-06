@@ -138,9 +138,22 @@ async function syncOne(env, discord, site, channelId, t, row, budget) {
     await discord.editMessage(row.channel_id, row.message_id, post).catch((e) => {
       if (!lostAccess(e)) throw e;
     });
-    await env.DB.prepare("UPDATE tourneys SET name = ?, starts_at = ?, status = ?, shown = ? WHERE id = ?")
-      .bind(t.name, startsAt, t.status, shown, t.id)
-      .run();
+    const update = env.DB.prepare("UPDATE tourneys SET name = ?, starts_at = ?, status = ?, shown = ? WHERE id = ?").bind(
+      t.name,
+      startsAt,
+      t.status,
+      shown,
+      t.id,
+    );
+    if (startsAt === row.starts_at) await update.run();
+    else {
+      // Moved: the reminders go out again for the new time (not to those whose DMs are closed).
+      await env.DB.batch([
+        update,
+        env.DB.prepare("UPDATE tourneys SET reminded = 0 WHERE id = ?").bind(t.id),
+        env.DB.prepare("UPDATE reminders SET dm_status = 'pending' WHERE tourney_id = ? AND dm_status = 'sent'").bind(t.id),
+      ]);
+    }
   }
 
   const results = resultsMessage(site, t);
