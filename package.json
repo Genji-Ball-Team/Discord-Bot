@@ -1,0 +1,16 @@
+{
+  "name": "genjiball-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Genji Ball Discord bot: leaderboard, stats and tournament sign-ups, on Cloudflare Workers",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "register": "node scripts/register.mjs",
+    "db:setup": "wrangler d1 execute genjiball-discord-bot --remote --file=schema.sql",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

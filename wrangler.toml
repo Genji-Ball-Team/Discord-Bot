@@ -1,0 +1,47 @@
+name = "genjiball-discord-bot"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Every minute: tournament reminders. Every LEADERBOARD_REFRESH_MINUTES: live leaderboards.
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "genjiball-discord-bot"
+database_id = "436cac8d-7325-44c7-9d83-cb22cbe17e86"
+
+[vars]
+# From the Discord Developer Portal, "General Information" page of your app.
+DISCORD_APPLICATION_ID = "1556986418239115295"
+DISCORD_PUBLIC_KEY = "8d2c76d55758fea1e5f5486946b95ca31783fda2c6348b5d6e3be643c1cab2e2"
+
+# The website the bot reads.
+SITE_URL = "https://genjiball.us"
+
+# The "staff" role: members with it (and server admins) can use /host, /setup and /leaderboard.
+# Everyone can use /stats. Right-click the role → Copy Role ID.
+STAFF_ROLE_ID = "1199414765055901737"
+
+# Roles pinged on a tournament sign-up post. Right-click the role in Discord → Copy Role ID
+# (needs Developer Mode on). Leave empty to ping nobody.
+EU_ROLE_ID = "1110566266814615584"
+NA_ROLE_ID = "1110566315879571517"
+
+# Default tournament start time per region, in that region's time zone.
+# EU 21:00 Moscow time, NA 21:00 New York time (EST/EDT).
+EU_DEFAULT_TIME = "21:00"
+EU_TIMEZONE = "Europe/Moscow"
+NA_DEFAULT_TIME = "21:00"
+NA_TIMEZONE = "America/New_York"
+
+# The emoji players react with to sign up.
+SIGNUP_EMOJI = "✅"
+
+# How often the live leaderboard (/setup leaderboard) updates, in minutes (1–60).
+LEADERBOARD_REFRESH_MINUTES = "5"
+
+# Minutes before the start that sign-ups close, the list is posted and DMs go out.
+REMINDER_MINUTES = "5"
+
+# The bot token is a secret: set it with `npx wrangler secret put DISCORD_TOKEN`, never here.
