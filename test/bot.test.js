@@ -3,9 +3,46 @@ import { test } from "node:test";
 import worker, { optionsOf } from "../src/index.js";
 import { fetchRanks, formatLines, parseButton, renderLeaderboard } from "../src/leaderboard.js";
 import { Site } from "../src/site.js";
+import { nextStart, parseTime } from "../src/time.js";
 import { Discord } from "../src/discord.js";
-import { sendReminders, syncTourneys } from "../src/tourneys.js";
-import { ENV, STAFF, fakeCtx, fakeD1, fakeTourney, installFetch } from "./helpers.js";
+import { listMessages, runReminders } from "../src/tournament.js";
+import { ENV, STAFF, fakeCtx, fakeD1, installFetch } from "./helpers.js";
+
+// ---------- time ----------
+
+test("reads times people type", () => {
+  assert.deepEqual(parseTime("21:00"), { hour: 21, minute: 0 });
+  assert.deepEqual(parseTime("9pm"), { hour: 21, minute: 0 });
+  assert.deepEqual(parseTime("9:30 PM"), { hour: 21, minute: 30 });
+  assert.deepEqual(parseTime("12am"), { hour: 0, minute: 0 });
+  assert.deepEqual(parseTime("20.15"), { hour: 20, minute: 15 });
+  assert.equal(parseTime("25:00"), null);
+  assert.equal(parseTime("13pm"), null);
+  assert.equal(parseTime("soon"), null);
+});
+
+test("NA Saturday 21:00 is 9pm New York time, EST or EDT", () => {
+  // Tue 6 Oct 2026, 10:00 UTC. NY is on EDT (UTC-4) until 1 Nov.
+  const now = Date.UTC(2026, 9, 6, 10, 0);
+  assert.equal(new Date(nextStart("saturday", { hour: 21, minute: 0 }, "America/New_York", now)).toISOString(), "2026-10-11T01:00:00.000Z");
+  // After the clocks go back (EST, UTC-5).
+  const nov = Date.UTC(2026, 10, 3, 10, 0);
+  assert.equal(new Date(nextStart("saturday", { hour: 21, minute: 0 }, "America/New_York", nov)).toISOString(), "2026-11-08T02:00:00.000Z");
+});
+
+test("EU 21:00 is 9pm Moscow time (UTC+3)", () => {
+  const now = Date.UTC(2026, 9, 6, 10, 0); // Tuesday
+  assert.equal(new Date(nextStart("saturday", { hour: 21, minute: 0 }, "Europe/Moscow", now)).toISOString(), "2026-10-10T18:00:00.000Z");
+  assert.equal(new Date(nextStart("today", { hour: 21, minute: 0 }, "Europe/Moscow", now)).toISOString(), "2026-10-06T18:00:00.000Z");
+  assert.equal(new Date(nextStart("tomorrow", { hour: 21, minute: 0 }, "Europe/Moscow", now)).toISOString(), "2026-10-07T18:00:00.000Z");
+});
+
+test("a weekday that's today but already past means next week", () => {
+  const tuesdayLate = Date.UTC(2026, 9, 6, 19, 0); // 22:00 Moscow
+  assert.equal(new Date(nextStart("tuesday", { hour: 21, minute: 0 }, "Europe/Moscow", tuesdayLate)).toISOString(), "2026-10-13T18:00:00.000Z");
+  const tuesdayEarly = Date.UTC(2026, 9, 6, 10, 0);
+  assert.equal(new Date(nextStart("tuesday", { hour: 21, minute: 0 }, "Europe/Moscow", tuesdayEarly)).toISOString(), "2026-10-06T18:00:00.000Z");
+});
 
 // ---------- leaderboard ----------
 
@@ -17,12 +54,12 @@ test("page 4 (ranks 46–60) reads API pages 1 and 2", async () => {
   assert.equal(calls.filter((c) => c.site).length, 2);
 });
 
-test("lines look like '` 1.` **Fealthy** — Grandmaster · **2000 Elo**'", () => {
+test("lines look like '1. Fealthy 2000'", () => {
   const lines = formatLines([
-    { rank: 1, name: "Fealthy", rating: 2000.4, tier: { label: "Grandmaster" } },
-    { rank: 10, name: "Ipse_ity", rating: 1600, tier: null },
+    { rank: 1, name: "Fealthy", rating: 2000.4 },
+    { rank: 2, name: "Ipseity", rating: 1600 },
   ]);
-  assert.deepEqual(lines, ["` 1.` **Fealthy** — Grandmaster · **2000 Elo**", "`10.` **Ipse\\_ity** — Unranked · **1600 Elo**"]);
+  assert.deepEqual(lines, ["1.  Fealthy 2000", "2.  Ipseity 1600"]);
 });
 
 test("buttons: EU default, NA switch, pages up to 5, ids unique", async () => {
@@ -30,7 +67,7 @@ test("buttons: EU default, NA switch, pages up to 5, ids unique", async () => {
   const { message } = await renderLeaderboard(new Site(ENV), undefined, undefined);
   const [regionRow, pageRow] = message.components;
   assert.match(message.embeds[0].title, /EU Leaderboard — Top 15/);
-  assert.match(message.embeds[0].description, /^` 1\.` \*\*Fealthy\*\*/);
+  assert.match(message.embeds[0].description, /1\. {2}Fealthy/);
   assert.equal(regionRow.components[0].disabled, true); // EU is current
   assert.equal(pageRow.components[0].disabled, true); // no Prev on page 1
   const ids = [...regionRow.components, ...pageRow.components].map((b) => b.custom_id);
@@ -40,7 +77,7 @@ test("buttons: EU default, NA switch, pages up to 5, ids unique", async () => {
 
   const last = await renderLeaderboard(new Site(ENV), "na", 5);
   assert.match(last.message.embeds[0].title, /NA Leaderboard — Top 75/);
-  assert.match(last.message.embeds[0].description, /^`61\.`/);
+  assert.match(last.message.embeds[0].description, /^```\n61\./);
   assert.equal(last.message.components[1].components[2].disabled, true); // no page 6
 });
 
@@ -48,7 +85,7 @@ test("Next is off when fewer players than the next page", async () => {
   installFetch({ boardTotal: 20 });
   const { message } = await renderLeaderboard(new Site(ENV), "eu", 2);
   assert.equal(message.components[1].components[2].disabled, true);
-  assert.equal(message.embeds[0].description.split("\n").length, 5); // ranks 16–20
+  assert.equal(message.embeds[0].description.split("\n").length, 2 + 5); // ranks 16–20
 });
 
 // ---------- the worker: signatures, commands, buttons ----------
@@ -161,7 +198,7 @@ test("/stats finds a typed name and shows the numbers", async () => {
   );
   await ctx.done();
   const embed = calls.find((c) => c.path?.endsWith("@original")).body.embeds[0];
-  assert.match(embed.title, /^Fealthy — EU/);
+  assert.match(embed.title, /^Fealthy — 🇪🇺 EU/);
   const field = (n) => embed.fields.find((f) => f.name === n)?.value;
   assert.equal(field("Rating"), "**2,000** · Grandmaster");
   assert.equal(field("Rank"), "#1");
@@ -211,195 +248,81 @@ test("subcommand options are read", () => {
   assert.deepEqual(options, { region: "na", day: "saturday" });
 });
 
-// ---------- tourneys ----------
+// ---------- tournaments ----------
 
-const sync = (env) => {
-  const discord = new Discord(env, 45);
-  const site = new Site(env);
-  return syncTourneys(env, discord, site, () => discord.left - site.calls);
-};
-const remind = (env, nowMs) => {
-  const discord = new Discord(env, 45);
-  const site = new Site(env);
-  return sendReminders(env, discord, site, () => discord.left - site.calls, nowMs);
-};
-const START = Date.parse("2026-10-10T18:00:00Z");
-const discordCalls = (calls) => calls.filter((c) => !c.site);
-const press = (user, id = 3) => ({
-  type: 3,
+const hostCmd = (opts) => ({
+  type: 2,
   token: "tok",
   guild_id: "g1",
   channel_id: "tourney-chan",
-  member: { user: { id: user }, roles: [], permissions: "0" },
-  message: { id: "5000" },
-  data: { custom_id: `tr:${id}` },
+  member: STAFF,
+  data: { name: "host", options: [{ type: 1, name: "tournament", options: Object.entries(opts).map(([name, value]) => ({ type: 3, name, value })) }] },
 });
 
-test("a new tourney is announced with its region pinged, then edited only when it changes", async () => {
-  const env = { ...ENV, DB: fakeD1() };
-  const tourneys = { na: { upcoming: [fakeTourney({ region: "na", notes: "Bring a friend" })] } };
-  const calls = installFetch({ tourneys });
-  await sync(env);
+test("/host tournament: post, sign-ups, list, DMs, the closed DM noted", async () => {
+  const k = await keys();
+  const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
+  const users = [
+    { id: "u1", username: "fealthy", global_name: "Fealthy" },
+    { id: "bot", username: "GenjiBot", bot: true },
+    { id: "u2", username: "ipseity" },
+    { id: "u3", username: "closed" },
+  ];
+  const calls = installFetch({ reactors: { 5000: users }, closedDms: new Set(["u3"]) });
+  const ctx = fakeCtx();
+  await worker.fetch(await signed(k, hostCmd({ region: "na", day: "saturday" })), env, ctx);
+  await ctx.done();
 
   const post = calls.find((c) => c.method === "POST" && c.path === "/channels/tourney-chan/messages");
   assert.equal(post.body.content, "<@&role-na>");
   assert.deepEqual(post.body.allowed_mentions, { parse: [], roles: ["role-na"] });
-  const embed = post.body.embeds[0];
-  assert.equal(embed.title, "🏆 October Cup");
-  assert.equal(embed.url, "https://genjiball.us/tourney?id=3");
-  assert.match(embed.description, /<t:1791655200:F>/);
-  assert.match(embed.description, /Bring a friend/);
-  assert.match(embed.description, /Sign up on \[genjiball\.us\]/);
-  assert.equal(embed.fields.find((f) => f.name === "Signed up").value, "**4** / 20");
-  const [signUp, remindMe] = post.body.components[0].components;
-  assert.deepEqual([signUp.style, signUp.label, signUp.url], [5, "Sign up", "https://genjiball.us/tourney?id=3"]);
-  assert.equal(remindMe.custom_id, "tr:3");
-  assert.equal(calls.filter((c) => c.site).length, 2); // one read per region
+  assert.match(post.body.embeds[0].description, /<t:\d+:F>/);
+  assert.ok(calls.some((c) => c.method === "PUT" && c.path.includes("/reactions/%E2%9C%85/@me")));
+  const reply = calls.find((c) => c.path?.endsWith("@original")).body.content;
+  assert.match(reply, /Posted the NA sign-ups/);
 
-  // Nothing changed: no Discord call.
-  const before = discordCalls(calls).length;
-  await sync(env);
-  assert.equal(discordCalls(calls).length, before);
+  const t = await env.DB.prepare("SELECT * FROM tournaments").first();
+  assert.equal(t.status, "open");
+  assert.equal(t.message_id, "5000");
+  const weekday = new Date(t.starts_at * 1000).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", hour: "numeric", hour12: false });
+  assert.match(weekday, /Saturday.*21/);
 
-  // More sign-ups: the post is edited, without a ping.
-  tourneys.na.upcoming = [fakeTourney({ region: "na", notes: "Bring a friend", signups: { open: true, count: 20, full: true } })];
-  await sync(env);
-  const edit = calls.find((c) => c.method === "PATCH" && c.path === "/channels/tourney-chan/messages/5000");
-  assert.equal(edit.body.embeds[0].fields.find((f) => f.name === "Signed up").value, "**20** / 20 (full)");
-  assert.equal(edit.body.content, undefined);
-  assert.equal(calls.filter((c) => c.method === "POST").length, 1);
-});
+  // Too early: nothing happens.
+  const before = calls.length;
+  await runReminders(env, new Discord(env, 45), t.starts_at * 1000 - 10 * 60_000);
+  assert.equal(calls.length, before);
 
-test("no channel set: nothing is read or posted; a live tourney is announced without a ping", async () => {
-  const tourneys = { eu: { upcoming: [fakeTourney({ status: "live", signups: { open: false, count: 9, full: false } })] } };
-  const calls = installFetch({ tourneys });
-  await sync({ ...ENV, TOURNEY_CHANNEL_ID: "", DB: fakeD1() });
-  assert.equal(calls.length, 0);
-
-  await sync({ ...ENV, DB: fakeD1() });
-  const post = calls.find((c) => c.method === "POST");
-  assert.equal(post.body.content, undefined);
-  assert.deepEqual(post.body.allowed_mentions, { parse: [] });
-  assert.deepEqual(post.body.components[0].components.map((b) => b.label), ["Tourney page"]); // no Remind me
-});
-
-test("a past tourney that was never announced isn't posted", async () => {
-  const calls = installFetch({ tourneys: { eu: { past: [fakeTourney({ status: "done" })] } } });
-  await sync({ ...ENV, DB: fakeD1() });
-  assert.equal(discordCalls(calls).length, 0);
-});
-
-test("a finished tourney: its post says so and the standings are posted once, under it", async () => {
-  const env = { ...ENV, DB: fakeD1() };
-  const tourneys = { eu: { upcoming: [fakeTourney()] } };
-  const calls = installFetch({ tourneys });
-  await sync(env);
-
-  const standings = [
-    { place: 1, id: 1, name: "Fealthy", wins: 7, kills: 20 },
-    { place: 2, id: 2, name: "Ipse_ity", wins: 5, kills: 1 },
-    { place: 2, id: 5, name: "Kenzo", wins: 5, kills: 1 },
-    { place: 4, id: 6, name: "Mau", wins: 1, kills: 3 },
-  ];
-  const [l1, l2] = fakeTourney().lobbies;
-  const done = (lobbies) => fakeTourney({ status: "done", signups: { open: false, count: 18, full: false }, lobbies });
-  tourneys.eu = { upcoming: [], past: [done([{ ...l1, matchId: 10, standings, verified: true }, { ...l2, matchId: 11, void: true, standings }])] };
-  await sync(env);
-
-  const edit = calls.find((c) => c.method === "PATCH" && c.path === "/channels/tourney-chan/messages/5000");
-  assert.match(edit.body.embeds[0].description, /Finished/);
-  assert.deepEqual(edit.body.components[0].components.map((b) => b.label), ["Tourney page"]);
-  const results = calls.filter((c) => c.method === "POST" && c.body?.embeds?.[0]?.title?.includes("standings"));
-  assert.equal(results.length, 1);
-  assert.equal(results[0].body.message_reference.message_id, "5000");
-  const fields = results[0].body.embeds[0].fields;
-  assert.equal(fields.length, 1); // the void lobby is left out
-  assert.equal(fields[0].name, "Lobby 1 · ✅ verified");
-  assert.equal(
-    fields[0].value,
-    "🥇 **Fealthy** — 7 wins · 20 kills\n🥈 **Ipse\\_ity** — 5 wins · 1 kill\n🥈 **Kenzo** — 5 wins · 1 kill\n`4.` **Mau** — 1 win · 3 kills",
-  );
-  assert.deepEqual(results[0].body.allowed_mentions, { parse: [] });
-
-  // Again unchanged: nothing. Lobby 2 un-voided: the standings message is edited, not posted again.
-  const before = discordCalls(calls).length;
-  await sync(env);
-  assert.equal(discordCalls(calls).length, before);
-  tourneys.eu.past = [done([{ ...l1, matchId: 10, standings, verified: true }, { ...l2, matchId: 11, standings }])];
-  await sync(env);
-  const resultsEdit = calls.filter((c) => c.method === "PATCH" && c.path === `/channels/tourney-chan/messages/5001`);
-  assert.equal(resultsEdit.at(-1).body.embeds[0].fields.length, 2);
-  assert.equal(calls.filter((c) => c.method === "POST" && c.body?.embeds?.[0]?.title?.includes("standings")).length, 1);
-});
-
-test("Remind me toggles a DM; the DMs go out 5 minutes before, closed DMs named", async () => {
-  const k = await keys();
-  const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
-  const calls = installFetch({ tourneys: { eu: { upcoming: [fakeTourney()] } }, closedDms: new Set(["u3"]) });
-  await sync(env);
-
-  const answer = async (user) => (await (await worker.fetch(await signed(k, press(user)), env, fakeCtx())).json()).data;
-  const first = await answer("u1");
-  assert.equal(first.flags, 64);
-  assert.match(first.content, /I'll DM you 5 minutes before \*\*October Cup\*\*/);
-  assert.match(first.content, /doesn't sign you up/);
-  await answer("u2");
-  await answer("u3");
-  await answer("u4");
-  assert.match((await answer("u4")).content, /no DM/); // pressed twice: off again
-
-  // Too early: nothing.
-  const before = discordCalls(calls).length;
-  await remind(env, START - 10 * 60_000);
-  assert.equal(discordCalls(calls).length, before);
-
-  await remind(env, START - 5 * 60_000);
+  // 5 minutes before: list posted, DMs sent.
+  await runReminders(env, new Discord(env, 45), t.starts_at * 1000 - 5 * 60_000);
+  const list = calls.find((c) => c.method === "POST" && c.body?.content?.startsWith("📋"));
+  assert.match(list.body.content, /\*\*3\*\* signed up:\n1\. <@u1>\n2\. <@u2>\n3\. <@u3>$/);
+  assert.deepEqual(list.body.allowed_mentions, { parse: [] });
   const dms = calls.filter((c) => c.method === "POST" && c.path.startsWith("/channels/dm-"));
-  assert.deepEqual(dms.map((d) => d.path), ["/channels/dm-u1/messages", "/channels/dm-u2/messages", "/channels/dm-u3/messages"]);
-  assert.match(dms[0].body.content, /October Cup.*starts <t:1791655200:R>/);
-  assert.match(dms[0].body.content, /https:\/\/genjiball\.us\/tourney\?id=3/);
-  assert.doesNotMatch(dms[0].body.content, /1\.3\.3/);
+  assert.equal(dms.length, 3); // u3's was refused
+  assert.match(dms[0].body.content, /Genji Ball 1\.3\.3/);
   const note = calls.find((c) => c.body?.content?.startsWith("Couldn't DM"));
-  assert.equal(note.path, "/channels/tourney-chan/messages");
-  assert.deepEqual(note.body.allowed_mentions, { parse: [], users: ["u3"] });
-  assert.equal((await env.DB.prepare("SELECT reminded FROM tourneys").first()).reminded, 1);
+  assert.match(note.body.content, /<@u3>/);
+  assert.equal((await env.DB.prepare("SELECT status FROM tournaments").first()).status, "done");
+  const statuses = (await env.DB.prepare("SELECT user_id, dm_status FROM signups ORDER BY user_id").all()).results;
+  assert.deepEqual(statuses.map((s) => s.dm_status), ["sent", "sent", "failed"]);
 
-  // Later runs do nothing more; a late press says the reminders went out.
-  const after = discordCalls(calls).length;
-  await remind(env, START);
-  assert.equal(discordCalls(calls).length, after);
-  assert.match((await answer("u5")).content, /already went out/);
+  // Later runs do nothing more.
+  const after = calls.length;
+  await runReminders(env, new Discord(env, 45), t.starts_at * 1000);
+  assert.equal(calls.length, after);
 });
 
-test("a tourney moved after its reminders went out reminds again, except closed DMs", async () => {
+test("a big tournament's DMs spread over several cron runs", async () => {
   const env = { ...ENV, DB: fakeD1() };
-  const tourneys = { eu: { upcoming: [fakeTourney()] } };
-  const calls = installFetch({ tourneys, closedDms: new Set(["u2"]) });
-  await sync(env);
-  for (const u of ["u1", "u2"]) await env.DB.prepare("INSERT INTO reminders (tourney_id, user_id, channel_id) VALUES (3, ?, 'tourney-chan')").bind(u).run();
-  await remind(env, START - 5 * 60_000);
-  assert.equal((await env.DB.prepare("SELECT reminded FROM tourneys").first()).reminded, 1);
-
-  const later = Date.parse("2026-10-10T20:00:00Z");
-  tourneys.eu.upcoming = [fakeTourney({ startsAt: "2026-10-10T20:00:00Z" })];
-  await sync(env);
-  assert.equal((await env.DB.prepare("SELECT reminded FROM tourneys").first()).reminded, 0);
-  const before = calls.filter((c) => c.path?.startsWith("/channels/dm-")).length;
-  await remind(env, later - 5 * 60_000);
-  const dms = calls.filter((c) => c.path?.startsWith("/channels/dm-")).slice(before);
-  assert.deepEqual(dms.map((d) => d.path), ["/channels/dm-u1/messages"]);
-});
-
-test("a big tourney's reminders spread over several cron runs", async () => {
-  const env = { ...ENV, DB: fakeD1() };
-  const calls = installFetch({ tourneys: { eu: { upcoming: [fakeTourney()] } } });
-  await sync(env);
-  for (let i = 0; i < 70; i++) {
-    await env.DB.prepare("INSERT INTO reminders (tourney_id, user_id, channel_id) VALUES (3, ?, 'tourney-chan')").bind(`p${i}`).run();
-  }
+  const users = Array.from({ length: 70 }, (_, i) => ({ id: `p${i}`, username: `p${i}` }));
+  const calls = installFetch({ reactors: { m1: users } });
+  const start = Math.floor(Date.UTC(2026, 9, 10, 18, 0) / 1000);
+  await env.DB.prepare("INSERT INTO tournaments (guild_id, channel_id, message_id, region, name, starts_at, created_by, created_at) VALUES ('g','c','m1','eu','EU Weekly Tournament',?,'me',0)")
+    .bind(start)
+    .run();
   let runs = 0;
-  while (!(await env.DB.prepare("SELECT reminded FROM tourneys").first()).reminded && runs < 10) {
-    await remind(env, START - (5 - runs) * 60_000);
+  while ((await env.DB.prepare("SELECT status FROM tournaments").first()).status !== "done" && runs < 10) {
+    await runReminders(env, new Discord(env, 45), start * 1000 - (5 - runs) * 60_000);
     runs++;
   }
   const dms = calls.filter((c) => c.method === "POST" && c.path.startsWith("/channels/dm-"));
@@ -408,59 +331,45 @@ test("a big tourney's reminders spread over several cron runs", async () => {
   assert.equal(new Set(dms.map((d) => d.path)).size, 70); // nobody DMed twice
 });
 
-test("a cancelled tourney: post greyed out, no DMs, Remind me says so", async () => {
-  const k = await keys();
-  const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
-  const tourneys = { eu: { upcoming: [fakeTourney()] } };
-  const calls = installFetch({ tourneys });
-  await sync(env);
-  await worker.fetch(await signed(k, press("u1")), env, fakeCtx());
-
-  tourneys.eu = { upcoming: [], past: [fakeTourney({ status: "cancelled", signups: { open: false, count: 4, full: false } })] };
-  await sync(env);
-  const edit = calls.find((c) => c.method === "PATCH");
-  assert.match(edit.body.embeds[0].title, /~~🏆 October Cup~~ — Cancelled/);
-  assert.equal(edit.body.embeds[0].color, 0x808080);
-
-  await remind(env, START - 5 * 60_000);
-  assert.ok(!calls.some((c) => c.path?.startsWith("/channels/dm-")));
-  const res = await worker.fetch(await signed(k, press("u2")), env, fakeCtx());
-  assert.match((await res.json()).data.content, /was cancelled/);
+test("a long sign-up list splits under Discord's limit", () => {
+  const users = Array.from({ length: 150 }, (_, i) => ({ id: String(100000000000000000n + BigInt(i)) }));
+  const parts = listMessages("header", users);
+  assert.ok(parts.length > 1);
+  for (const p of parts) assert.ok(p.length <= 2000);
+  assert.equal(parts.join("\n").match(/<@/g).length, 150);
 });
 
-test("Remind me on an unknown or started tourney says so", async () => {
-  const k = await keys();
-  const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
-  installFetch({ tourneys: { eu: { upcoming: [fakeTourney({ startsAt: "2020-01-01T00:00:00Z" })] } } });
-  await sync(env);
-  const ask = async (id) => (await (await worker.fetch(await signed(k, press("u1", id)), env, fakeCtx())).json()).data.content;
-  assert.match(await ask(3), /already started/);
-  assert.match(await ask(99), /don't know that tourney/);
-});
-
-test("/host points to the site's tourneys", async () => {
+test("/host tournament refuses a start that's too close", async () => {
   const k = await keys();
   const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
   const calls = installFetch();
-  const res = await worker.fetch(
-    await signed(k, { type: 2, token: "tok", guild_id: "g1", member: STAFF, data: { name: "host", options: [{ type: 1, name: "tournament", options: [] }] } }),
-    env,
-    fakeCtx(),
-  );
-  const data = await res.json();
-  assert.equal(data.type, 4);
-  assert.equal(data.data.flags, 64);
-  assert.match(data.data.content, /genjiball\.us.*<#tourney-chan>/s);
-  assert.equal(calls.length, 0);
+  const ctx = fakeCtx();
+  // "today" at a time that's already past in Moscow lands in the past → refused.
+  await worker.fetch(await signed(k, hostCmd({ region: "eu", day: "today", time: "00:01" })), env, ctx);
+  await ctx.done();
+  assert.match(calls.find((c) => c.path?.endsWith("@original")).body.content, /too soon/);
+  assert.equal(await env.DB.prepare("SELECT * FROM tournaments").first(), null);
 });
 
-test("the cron syncs tourneys every 5 minutes", async () => {
-  const env = { ...ENV, DB: fakeD1() };
-  const calls = installFetch({ tourneys: { eu: { upcoming: [fakeTourney()] } } });
-  await worker.scheduled({ scheduledTime: Date.UTC(2026, 9, 6, 10, 7) }, env, fakeCtx());
-  assert.ok(!calls.some((c) => c.path?.startsWith("/api/tourneys")));
-  await worker.scheduled({ scheduledTime: Date.UTC(2026, 9, 6, 10, 10) }, env, fakeCtx());
-  assert.ok(calls.some((c) => c.method === "POST" && c.path === "/channels/tourney-chan/messages"));
+test("/host cancel marks the next one cancelled and edits the post", async () => {
+  const k = await keys();
+  const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
+  const calls = installFetch();
+  const ctx = fakeCtx();
+  await worker.fetch(await signed(k, hostCmd({ region: "eu", day: "sunday", time: "9pm", name: "Big Cup" })), env, ctx);
+  await ctx.done();
+  const ctx2 = fakeCtx();
+  await worker.fetch(
+    await signed(k, { ...hostCmd({}), data: { name: "host", options: [{ type: 1, name: "cancel", options: [{ type: 3, name: "region", value: "eu" }] }] } }),
+    env,
+    ctx2,
+  );
+  await ctx2.done();
+  assert.equal((await env.DB.prepare("SELECT status FROM tournaments").first()).status, "cancelled");
+  const edit = calls.find((c) => c.method === "PATCH" && c.path === "/channels/tourney-chan/messages/5000");
+  assert.match(edit.body.embeds[0].title, /Big Cup.*Cancelled/);
+  await runReminders(env, new Discord(env, 45), Date.now() + 8 * 86400_000);
+  assert.ok(!calls.some((c) => c.body?.content?.startsWith("📋")));
 });
 
 test("the cron refreshes live boards every 5 minutes and drops deleted ones", async () => {
@@ -481,14 +390,13 @@ test("the cron refreshes live boards every 5 minutes and drops deleted ones", as
   assert.deepEqual((await env.DB.prepare("SELECT channel_id FROM boards").all()).results.map((r) => r.channel_id), ["chan1"]);
 });
 
-test("only Staff (or admins) can use /setup and /leaderboard; everyone can use /stats", async () => {
+test("only Staff (or admins) can use /host, /setup and /leaderboard; everyone can use /stats", async () => {
   const k = await keys();
   const env = { ...ENV, DISCORD_PUBLIC_KEY: k.publicKey, DB: fakeD1() };
   const calls = installFetch();
   const player = { user: { id: "someone" }, roles: ["role-eu"], permissions: "0" };
-  const cmd = (name, member) => ({ type: 2, token: "tok", guild_id: "g1", channel_id: "chan1", member, data: { name } });
-  for (const name of ["setup", "leaderboard"]) {
-    const res = await worker.fetch(await signed(k, cmd(name, player)), env, fakeCtx());
+  for (const name of ["host", "setup", "leaderboard"]) {
+    const res = await worker.fetch(await signed(k, { ...hostCmd({ region: "eu", day: "saturday" }), member: player, data: { ...hostCmd({}).data, name } }), env, fakeCtx());
     const data = await res.json();
     assert.equal(data.type, 4);
     assert.equal(data.data.flags, 64);
@@ -497,7 +405,7 @@ test("only Staff (or admins) can use /setup and /leaderboard; everyone can use /
   assert.ok(!calls.some((c) => !c.site)); // nothing posted
 
   const admin = { user: { id: "owner" }, roles: [], permissions: String(1n << 3n) };
-  const ok = await worker.fetch(await signed(k, cmd("leaderboard", admin)), env, fakeCtx());
+  const ok = await worker.fetch(await signed(k, { ...hostCmd({ region: "eu", day: "saturday" }), member: admin }), env, fakeCtx());
   assert.equal((await ok.json()).type, 5);
 
   const stats = await worker.fetch(

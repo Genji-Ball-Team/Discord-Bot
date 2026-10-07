@@ -88,6 +88,16 @@ export class Discord {
     return this.call("PATCH", `/channels/${channelId}/messages/${messageId}`, message);
   }
 
+  react(channelId, messageId, emoji) {
+    return this.call("PUT", `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`);
+  }
+
+  reactions(channelId, messageId, emoji, after) {
+    const q = new URLSearchParams({ limit: "100" });
+    if (after) q.set("after", after);
+    return this.call("GET", `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}?${q}`);
+  }
+
   openDm(userId) {
     return this.call("POST", "/users/@me/channels", { recipient_id: userId });
   }
