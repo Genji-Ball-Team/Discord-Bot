@@ -99,7 +99,7 @@ export async function renderStats(site, playerValue, regionValue) {
   return {
     embeds: [
       {
-        title: `${p.name} — ${info.label}`,
+        title: `${p.name} — ${info.flag} ${info.label}`,
         url: site.playerUrl(p.id, region),
         description: aliases.length ? `Also known as ${aliases.map((a) => `\`${a}\``).join(", ")}` : undefined,
         color: tierColor(r?.tier),

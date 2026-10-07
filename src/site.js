@@ -46,17 +46,8 @@ export class Site {
     return this.get(`/api/players/${id}/stats`, { region });
   }
 
-  /** Upcoming tourneys and the first page of past ones. */
-  tourneys(region) {
-    return this.get("/api/tourneys", { region });
-  }
-
   playerUrl(id, region) {
     return `${this.base}/player?id=${id}&region=${region}`;
-  }
-
-  tourneyUrl(id) {
-    return `${this.base}/tourney?id=${id}`;
   }
 
   leaderboardUrl(region) {

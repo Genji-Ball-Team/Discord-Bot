@@ -1,6 +1,6 @@
 // /leaderboard: the top 75 of a region, 15 a page, with EU/NA and page buttons.
 
-import { REGIONS, regionOf } from "./site.js";
+import { REGIONS, regionOf, tierColor } from "./site.js";
 
 export const PAGE_SIZE = 15;
 export const MAX_PAGES = 5;
@@ -23,21 +23,16 @@ export async function fetchRanks(site, region, from, to) {
   return { players: inRange, more };
 }
 
-/** Names can hold Discord markdown (`*`, `_`, `~` …): show them as typed. */
-export function escapeMarkdown(text) {
-  return String(text).replace(/([\\*_~`|>#\[\]()-])/g, "\\$1");
+function pad(text, width) {
+  return text.length >= width ? text : text + " ".repeat(width - text.length);
 }
 
-/**
- * One line per player, like "` 1.` **MauMau** — God · **2084 Elo**". The rank is in a fixed-width
- * code box (` 4.` / `10.`) so the names line up.
- */
 export function formatLines(players) {
-  const width = String(Math.max(...players.map((p) => p.rank))).length + 1;
+  const nameWidth = Math.min(18, Math.max(4, ...players.map((p) => p.name.length)));
   return players.map((p) => {
-    const place = "`" + `${p.rank}.`.padStart(width, " ") + "`";
-    const name = p.name.length > 20 ? p.name.slice(0, 19) + "…" : p.name;
-    return `${place} **${escapeMarkdown(name)}** — ${p.tier?.label ?? "Unranked"} · **${Math.round(p.rating)} Elo**`;
+    const rank = pad(`${p.rank}.`, 4);
+    const name = p.name.length > nameWidth ? p.name.slice(0, nameWidth - 1) + "…" : pad(p.name, nameWidth);
+    return `${rank}${name} ${Math.round(p.rating)}`;
   });
 }
 
@@ -54,16 +49,16 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
   const info = REGIONS[region];
 
   const description = players.length
-    ? formatLines(players).join("\n")
+    ? "```\n" + formatLines(players).join("\n") + "\n```"
     : page === 1
       ? "Nobody is ranked here yet."
       : "No players on this page yet.";
 
   const embed = {
-    title: `${info.label} Leaderboard — Top ${to}`,
+    title: `${info.flag} ${info.label} Leaderboard — Top ${to}`,
     url: site.leaderboardUrl(region),
     description,
-    color: 0xed4245, // red side line
+    color: tierColor(players[0]?.tier),
     footer: {
       text: live
         ? `Live · updates every ${refreshMinutes} min · the buttons show you your own copy · Updated`
