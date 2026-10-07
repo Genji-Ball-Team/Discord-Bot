@@ -3,10 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Genji Ball Discord bot: leaderboard, stats and tourney posts, on Cloudflare Workers",
-  "engines": {
-    "node": ">=22.5"
-  },
+  "description": "Genji Ball Discord bot: leaderboard, stats and tournament sign-ups, on Cloudflare Workers",
   "scripts": {
     "deploy": "wrangler deploy",
     "register": "node scripts/register.mjs",

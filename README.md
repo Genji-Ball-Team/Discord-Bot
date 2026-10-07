@@ -1,99 +1,63 @@
 # Genji Ball Discord bot
 
-A Discord bot for the Genji Ball Ranked server. It runs on Cloudflare Workers, like genjiball.us, so nothing has to stay running on your PC.
+The Discord bot for the Genji Ball Ranked server. It runs on Cloudflare Workers, like genjiball.us, so nothing has to stay running on your PC.
 
-## What it does
+## Commands
+
+Everything is under **`/gr`**.
 
 | Command | Who | What |
 |---|---|---|
-| `/setup leaderboard [channel]` | Staff | Posts the **live leaderboard** in a channel: EU top 15, updated every 5 minutes. Its **EU / NA** and **◀ Prev / Next ▶** buttons (up to page 5, top 75) open a private copy for whoever presses them, so the channel's board stays the same for everyone. Run it again to refresh it; delete the message to stop it. |
-| `/leaderboard [region] [page]` | Staff | Posts a one-off leaderboard anywhere. Its buttons flip that message. |
-| `/stats player [region]` | Everyone | A player's rating, tier, rank, rounds, win %, kills, deflects, peak, streaks and recent form. Names autocomplete as you type. |
+| `/gr stats player [region]` | Everyone | A player's rating, tier, rank, rounds, win %, kills, deflects, peak, streaks and recent form. Names autocomplete. |
+| `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard. Its buttons flip that message. |
+| `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 15, updated every 5 minutes, EU/NA and pages up to the top 75). Its buttons open a private copy, so the channel's board stays the same for everyone. |
 
-**Tourneys** are made by admins on genjiball.us, and players sign up there with their in-game name. The bot announces each upcoming one in the tourney channel (`TOURNEY_CHANNEL_ID`) with its region's role pinged (@EU or @NA): the start time in **each reader's own time zone**, a **Sign up** link to the tourney's page and the sign-up count. Every 5 minutes it brings the post up to date (count, time, live, cancelled), and when the tourney is done it posts the standings of each lobby under it.
+"Staff" means the role in `STAFF_ROLE_ID`, plus server admins. Anyone else gets "Only Staff can use this".
 
-Players who press **🔔 Remind me** on the post get a DM 5 minutes before the start, with a link to the lobbies. Pressing it again turns it off. It doesn't sign them up: that's on the site. Anyone with DMs closed is named in the channel instead, so they still get a ping.
+## How a tournament runs
 
-"Staff" means anyone with your **Staff** role (`STAFF_ROLE_ID` in `wrangler.toml`), plus server admins so the owner can never lock themselves out. Anyone else gets a private "Only Staff can use this" reply. Everyone can press the leaderboard's buttons.
+Admins make tourneys on **genjiball.us** (the admin page), with their lobbies and hosts, as before. The bot only reads the site and never changes it.
 
-Discord still *lists* the staff commands for everyone. To hide them from non-staff too: Server Settings → Integrations → the bot → for `/setup` and `/leaderboard`, turn off **@everyone** and add **Staff**.
+1. **The post.** Within `TOURNEY_REFRESH_MINUTES` (5) of a tourney being made on the site, the bot posts its sign-up in `TOURNEY_CHANNEL_ID`: name, start time in each reader's own time zone, region and the sign-up count, with **Register**, **Unregister** and **👥 Who's signed up**. It never pings anyone. Each button answers privately.
+2. **5 minutes before** (`CONFIRM_MINUTES`), everyone registered gets a DM: "⏰ Tournament starting in 5 minutes" with a **Confirm** button. Anyone who doesn't press it isn't playing. Register stays open, and registering now confirms at once. Players with DMs closed never get the button, so they're out.
+3. **At the start**, the sign-up post is deleted and the list of confirmed players is posted as @mentions that notify nobody, ending "Hosts: split the lobbies from this list."
+4. When an admin marks the tourney **done** on the site (with lobby standings), the bot posts the standings under the list.
 
-**Tip for the leaderboard channel:** make it read-only for members (no Send Messages) so the board stays the only thing in it. The bot still needs View Channel, Send Messages and Embed Links there.
+Changes on the site follow within 5 minutes: a new name or start time updates the post (moved later during the 5 confirm minutes: back to sign-ups, and the DMs go out again before the new start), and a cancelled or deleted tourney's post is crossed out. Right before posting the list, the bot checks the site once more, so a last-minute move or cancel is caught too.
 
-## Setup (about 20 minutes, once)
+The site's own name sign-up on the tourney page isn't used by the bot: players sign up in Discord.
 
-You need: a Discord server you manage, the Genji Ball Cloudflare account, the one genjiball.us is on (check with `npx wrangler whoami`; never a personal account), and [Node.js](https://nodejs.org) (the LTS version) on your PC.
+## Tournament results
 
-### 1. Make the Discord app
+Every tournament match the site rates is posted in `RESULTS_CHANNEL_ID`, one post per lobby's match: the tourney and lobby, region, rounds and date, then each player ranked as in the standings (most wins, ties broken by kills) with their wins, kills and rating before → after with the change. No pings, no emojis, a red side line like the other posts.
 
-1. Go to <https://discord.com/developers/applications> → **New Application** → name it (e.g. *Genji Ball*).
-2. On **General Information**, copy the **Application ID** and **Public Key**.
-3. On **Bot**: click **Reset Token** and copy the token. Keep it secret: it's the bot's password.
-4. Invite it to your server: open this link with your Application ID in it.
+The bot follows the site's match feed (checked every 5 minutes; the site rates every 10), so a result shows up about 10–15 minutes after the match is uploaded. A longer copy of the match edits the post, and a voided match's post is deleted. A later recompute of the ratings doesn't change a post that's already up. Matches from before the bot started following the feed are never posted.
 
-   `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=216128`
+## Deploying a change
 
-   That asks for: View Channels, Send Messages, Embed Links, Add Reactions, Read Message History, and Mention All Roles (so it can ping @EU and @NA).
-
-### 2. Fill in `wrangler.toml`
-
-Open `wrangler.toml` in Notepad and paste in:
-
-- `DISCORD_APPLICATION_ID` and `DISCORD_PUBLIC_KEY` from step 1.
-- `STAFF_ROLE_ID`, `EU_ROLE_ID` and `NA_ROLE_ID`: in Discord, turn on Settings → Advanced → **Developer Mode**, then Server Settings → Roles → right-click the role → **Copy Role ID**.
-- `TOURNEY_CHANNEL_ID`: the channel the tourneys are announced in (right-click it → **Copy Channel ID**). Leave it empty for no tourney posts.
-
-### 3. Put it on Cloudflare
-
-Open a terminal in this folder (in File Explorer: click the address bar, type `cmd`, press Enter) and run these one at a time:
+Open a terminal in this folder (in File Explorer: click the address bar, type `cmd`, press Enter):
 
 ```
 npm install
-npx wrangler login
-npx wrangler d1 create genjiball-discord-bot
-```
-
-The last one prints a `database_id`. Paste it into `wrangler.toml` where it says `PASTE_DATABASE_ID_HERE`. Then:
-
-```
-npm run db:setup
-npx wrangler secret put DISCORD_TOKEN
 npm run deploy
 ```
 
-`secret put` asks for the bot token from step 1. `deploy` prints the bot's address, like `https://genjiball-discord-bot.yourname.workers.dev`.
+Changed the commands (`scripts/commands.js`)? Also `npm run register`: it asks for the bot token and puts the commands in the Genji Ball server (`DISCORD_GUILD_ID`), where they show up at once.
 
-### 4. Connect Discord to it
+First time only, or after adding a table to `schema.sql`: `npm run db:setup`.
 
-1. Back in the Developer Portal, **General Information** → **Interactions Endpoint URL**: paste the address from step 3 with `/interactions` on the end, e.g. `https://genjiball-discord-bot.yourname.workers.dev/interactions`, and **Save**. Discord tests it right away; if it saves, it works.
-2. Register the commands (same terminal, with your token and Application ID):
+The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secret put DISCORD_TOKEN`.
 
-   ```
-   set DISCORD_TOKEN=your-bot-token
-   set DISCORD_APPLICATION_ID=your-application-id
-   npm run register
-   ```
+## Setting it up from scratch
 
-   (In PowerShell instead of cmd: `$env:DISCORD_TOKEN="..."` and `$env:DISCORD_APPLICATION_ID="..."`.)
-
-   They can take a few minutes to show up. To see them in your server instantly while testing, also `set DISCORD_GUILD_ID=your-server-id` before `npm run register`.
-
-### 5. Try it
-
-- `/setup leaderboard channel:#leaderboard`
-- `/stats player:Fealthy`
-
-## Changing things later
-
-- Edit the code or `wrangler.toml`, then `npm run deploy`. `LEADERBOARD_REFRESH_MINUTES` sets how often the live board updates.
-- Changed `schema.sql`? Run `npm run db:setup` **before** `npm run deploy`, so the new tables are there when the new code runs.
-- Changed `scripts/commands.js` (command names or options)? Also `npm run register`.
-- `npm test` runs the tests (needs Node 22.5 or newer).
-- Working on the code? Read [AGENTS.md](AGENTS.md), and open a PR with the template: CI runs `npm test` on it.
+1. Discord Developer Portal → New Application. Copy the **Application ID** and **Public Key** into `wrangler.toml`. On **Bot**, Reset Token and keep it.
+2. Invite it: `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=19456` (View Channels, Send Messages and Embed Links. It only deletes its own posts, which needs nothing more).
+3. `npx wrangler login`, `npx wrangler d1 create genjiball-discord-bot` (paste the id into `wrangler.toml`), `npm run db:setup`, `npx wrangler secret put DISCORD_TOKEN`, `npm run deploy`.
+4. Developer Portal → General Information → **Interactions Endpoint URL**: the address `deploy` printed, plus `/interactions`. Save.
+5. `npm run register`.
 
 ## Good to know
 
-- **New tourneys show up within 5 minutes** of an admin making them on the site (`TOURNEY_REFRESH_MINUTES`). A tourney that's already over when the bot first sees it isn't posted.
-- **Big tourneys:** the free Cloudflare plan lets each minute's run make about 45 Discord requests, so the bot DMs about 20–40 people a minute. 70 reminders are all sent within the 5 minutes.
-- **Pings:** the tourney updates, the standings and the leaderboard never ping anyone. Only a new tourney's announcement pings its region's role, and only the "couldn't DM" note pings the people named in it.
-- **Where the numbers come from:** genjiball.us's public API (`/api/leaderboard`, `/api/players`, `/api/players/:id/stats` …). Nothing here can change the site.
+- **Limits:** the free Cloudflare plan allows about 45 Discord requests a minute, so the bot sends about 20 Confirm DMs a minute: 100 within the 5 minutes.
+- **Where everything comes from:** genjiball.us's public API. The bot never changes the site.
+- `npm test` runs the tests (Node 22.5 or newer).

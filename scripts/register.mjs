@@ -1,33 +1,49 @@
-// Registers the slash commands with Discord. Run it once after setup, and again after changing
+// Registers the slash commands (/gr …) with Discord. Run it once, and again after changing
 // scripts/commands.js:
 //
-//   DISCORD_TOKEN=... DISCORD_APPLICATION_ID=... node scripts/register.mjs
+//   npm run register
 //
-// On Windows PowerShell:
-//   $env:DISCORD_TOKEN="..."; $env:DISCORD_APPLICATION_ID="..."; node scripts/register.mjs
+// It asks for the bot token (Developer Portal → your app → Bot → Reset Token). Or set
+// DISCORD_TOKEN first to skip the question.
 //
-// Add DISCORD_GUILD_ID (your server's id) to make them show up in that server instantly while
-// testing. Without it they're global, which can take a few minutes to appear.
+// The commands go to the Genji Ball server only (DISCORD_GUILD_ID below), where they show up at
+// once. It also removes any old global commands (/stats, /host, /setup, /leaderboard), so there are
+// no doubles.
 
+import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import { commands } from "./commands.js";
 
-const token = process.env.DISCORD_TOKEN;
-const appId = process.env.DISCORD_APPLICATION_ID;
-const guildId = process.env.DISCORD_GUILD_ID;
-if (!token || !appId) {
-  console.error("Set DISCORD_TOKEN and DISCORD_APPLICATION_ID first (see the top of this file).");
+const toml = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+const fromToml = (key) => new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, "m").exec(toml)?.[1];
+
+const appId = process.env.DISCORD_APPLICATION_ID || fromToml("DISCORD_APPLICATION_ID");
+const guildId = process.env.DISCORD_GUILD_ID || fromToml("DISCORD_GUILD_ID");
+let token = process.env.DISCORD_TOKEN;
+if (!token) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  token = (await rl.question("Paste the bot token and press Enter: ")).trim();
+  rl.close();
+}
+if (!token || !appId || !guildId) {
+  console.error("Missing the bot token, DISCORD_APPLICATION_ID or DISCORD_GUILD_ID (in wrangler.toml).");
   process.exit(1);
 }
 
-const path = guildId ? `/applications/${appId}/guilds/${guildId}/commands` : `/applications/${appId}/commands`;
-const res = await fetch(`https://discord.com/api/v10${path}`, {
-  method: "PUT",
-  headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-  body: JSON.stringify(commands),
-});
-const data = await res.json();
-if (!res.ok) {
-  console.error(`Discord said ${res.status}:`, JSON.stringify(data, null, 2));
-  process.exit(1);
+async function put(path, body) {
+  const res = await fetch(`https://discord.com/api/v10${path}`, {
+    method: "PUT",
+    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    console.error(`Discord said ${res.status}:`, JSON.stringify(data, null, 2));
+    process.exit(1);
+  }
+  return data;
 }
-console.log(`Registered ${data.length} commands${guildId ? ` in server ${guildId}` : " globally"}: ${data.map((c) => "/" + c.name).join(", ")}`);
+
+const registered = await put(`/applications/${appId}/guilds/${guildId}/commands`, commands);
+await put(`/applications/${appId}/commands`, []);
+console.log(`Done: /${registered.map((c) => c.name).join(", /")} is in your server (old global commands removed).`);

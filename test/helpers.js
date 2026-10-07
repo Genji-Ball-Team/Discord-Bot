@@ -20,14 +20,13 @@ export const ENV = {
   DISCORD_TOKEN: "bot-token",
   STAFF_ROLE_ID: "staff-role",
   SITE_URL: "https://genjiball.us",
-  EU_ROLE_ID: "role-eu",
-  NA_ROLE_ID: "role-na",
+  TOURNEY_CHANNEL_ID: "signups",
   EU_DEFAULT_TIME: "21:00",
-  EU_TIMEZONE: "Europe/Moscow",
+  EU_TIMEZONE: "Europe/Berlin",
   NA_DEFAULT_TIME: "21:00",
   NA_TIMEZONE: "America/New_York",
-  SIGNUP_EMOJI: "✅",
-  REMINDER_MINUTES: "5",
+  CONFIRM_MINUTES: "5",
+  RESULTS_CHANNEL_ID: "results",
 };
 
 /** 75+ fake players per region, best first. */
@@ -44,11 +43,12 @@ export function fakeLeaderboard(region, total = 80) {
 }
 
 /**
- * Installs a fake fetch. Discord calls are recorded in `calls`; `reactors` is who reacted to each
- * message; `closedDms` users answer 403 to a DM.
+ * Installs a fake fetch. Discord and site calls are recorded in `calls`; `closedDms` users answer
+ * 403 to a DM; `siteTourneys` is the site's tourneys by id.
  */
-export function installFetch({ reactors = {}, closedDms = new Set(), boardTotal = 80 } = {}) {
+export function installFetch({ closedDms = new Set(), boardTotal = 80, siteTourneys = new Map(), siteDown = false, feed = { entries: [], details: new Map() } } = {}) {
   const calls = [];
+  let nextTourney = 41;
   let nextId = 5000;
   const dmChannels = new Map();
   globalThis.fetch = async (input, init = {}) => {
@@ -58,7 +58,51 @@ export function installFetch({ reactors = {}, closedDms = new Set(), boardTotal 
     const reply = (data, status = 200) => new Response(data === null ? null : JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 
     if (url.hostname === "genjiball.us") {
-      calls.push({ site: true, method, path: url.pathname + url.search });
+      calls.push({ site: true, method, path: url.pathname + url.search, body, auth: init.headers?.Authorization });
+      if (url.pathname.startsWith("/api/admin/")) {
+        if (init.headers?.Authorization !== "Bearer admin-token") return reply({ error: "unauthorized", message: "No admin token" }, 401);
+        if (siteDown) return reply({ error: "internal", message: "Internal error" }, 500);
+        if (method === "POST" && url.pathname === "/api/admin/tourneys") {
+          const tourney = { id: nextTourney++, status: "scheduled", lobbies: [], ...body };
+          siteTourneys.set(tourney.id, tourney);
+          return reply({ tourney }, 201);
+        }
+        const t = /^\/api\/admin\/tourneys\/(\d+)$/.exec(url.pathname);
+        if (method === "POST" && t) {
+          const tourney = siteTourneys.get(Number(t[1]));
+          if (!tourney) return reply({ error: "not_found" }, 404);
+          Object.assign(tourney, body);
+          return reply({ tourney });
+        }
+      }
+      // The match feed: `feed.entries` are { seq, match } in change order; `feed.details` the full matches.
+      if (url.pathname === "/api/matches") {
+        const after = url.searchParams.get("after");
+        const last = feed.entries.at(-1)?.seq ?? 0;
+        if (after === "latest") return reply({ cursor: String(last), hasMore: false, matches: [] });
+        const limit = Number(url.searchParams.get("limit") ?? 20);
+        const next = feed.entries.filter((e) => e.seq > Number(after));
+        const page = next.slice(0, limit);
+        return reply({ cursor: String(page.at(-1)?.seq ?? after), hasMore: next.length > limit, matches: page.map((e) => e.match) });
+      }
+      const detail = /^\/api\/matches\/(\d+)$/.exec(url.pathname);
+      if (detail) {
+        const match = feed.details.get(Number(detail[1]));
+        return match ? reply({ match }) : reply({ error: "not_found" }, 404);
+      }
+      if (url.pathname === "/api/tourneys") {
+        if (siteDown) return reply({ error: "internal" }, 500);
+        const mine = [...siteTourneys.values()].filter((t) => t.region === (url.searchParams.get("region") ?? "eu"));
+        const upcoming = mine.filter((t) => t.status === "scheduled" || t.status === "live").sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+        const past = mine.filter((t) => t.status === "done" || t.status === "cancelled");
+        return reply({ region: url.searchParams.get("region"), page: 1, upcoming, past });
+      }
+      const pub = /^\/api\/tourneys\/(\d+)$/.exec(url.pathname);
+      if (pub) {
+        if (siteDown) return reply({ error: "internal" }, 500);
+        const tourney = siteTourneys.get(Number(pub[1]));
+        return tourney ? reply({ tourney }) : reply({ error: "not_found" }, 404);
+      }
       const region = url.searchParams.get("region") ?? "eu";
       if (url.pathname === "/api/leaderboard") {
         const page = Number(url.searchParams.get("page") ?? 1);
@@ -111,13 +155,7 @@ export function installFetch({ reactors = {}, closedDms = new Set(), boardTotal 
         return reply({ id: String(nextId++), channel_id: m[1], ...body });
       }
       if (method === "PATCH" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply({ id: "x", ...body });
-      if (method === "PUT" && /reactions\/.+\/@me$/.test(path)) return reply(null, 204);
-      if (method === "GET" && (m = /^\/channels\/[^/]+\/messages\/([^/]+)\/reactions\/(.+)$/.exec(path))) {
-        const users = reactors[m[1]] ?? [];
-        const after = url.searchParams.get("after");
-        const start = after ? users.findIndex((u) => u.id === after) + 1 : 0;
-        return reply(users.slice(start, start + 100));
-      }
+      if (method === "DELETE" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply(null, 204);
       if (method === "POST" && path === "/users/@me/channels") {
         dmChannels.set(body.recipient_id, `dm-${body.recipient_id}`);
         return reply({ id: `dm-${body.recipient_id}` });

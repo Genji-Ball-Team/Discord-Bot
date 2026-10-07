@@ -1,8 +1,7 @@
-// /stats: a player's numbers from the site, with name autocomplete.
+// /gr stats: one player's rating and stats from the site, and the name autocomplete.
 
 import { REGIONS, regionOf, tierColor } from "./site.js";
 
-/** Autocomplete: up to 25 matching players, "Name · 1834 Master". Discord wants an answer in 3 s. */
 export async function autocompletePlayers(site, text, regionValue) {
   const query = (text ?? "").trim();
   if (query.length < 2) return [];
@@ -14,11 +13,8 @@ export async function autocompletePlayers(site, text, regionValue) {
   });
 }
 
-/**
- * The player the option means: an id when they picked from the list, or else whatever they typed,
- * matched by name (an exact name first, as the site's search orders them).
- */
-export async function resolvePlayer(site, value, region) {
+/** The autocomplete sends a player id; a typed name is searched. */
+async function resolvePlayer(site, value, region) {
   const text = String(value ?? "").trim();
   if (/^\d+$/.test(text)) return Number(text);
   if (text.length < 2) return null;
@@ -32,7 +28,6 @@ const pct = (part, whole) => (whole ? `${Math.round((part / whole) * 100)}%` : "
 const num = (n) => (n === null || n === undefined ? "—" : Math.round(n).toLocaleString("en-US"));
 
 export async function renderStats(site, playerValue, regionValue) {
-  // With no region picked, use the one they have a rating in (EU first).
   const asked = regionValue ? regionOf(regionValue) : null;
   const id = await resolvePlayer(site, playerValue, asked ?? undefined);
   if (!id) return { content: `I couldn't find a player called **${String(playerValue).slice(0, 50)}**.` };
@@ -44,26 +39,18 @@ export async function renderStats(site, playerValue, regionValue) {
     region = profile.player.regions[0];
     profile = await site.player(id, region);
   }
-  const [history, stats] = await Promise.all([
-    site.history(id, region).catch(() => null),
-    site.stats(id, region).catch(() => null),
-  ]);
+  const [history, stats] = await Promise.all([site.history(id, region).catch(() => null), site.stats(id, region).catch(() => null)]);
 
   const p = profile.player;
   const r = p.rating;
   const s = stats?.stats;
   const info = REGIONS[region];
   const fields = [];
-
   if (r) {
     fields.push(
       { name: "Rating", value: `**${num(r.rating)}**${r.tier ? ` · ${r.tier.label}` : ""}`, inline: true },
       { name: "Rank", value: r.rank ? `#${r.rank}` : "Unranked", inline: true },
-      {
-        name: "Next tier",
-        value: r.nextTier ? `${r.nextTier.label} in ${num(r.nextTier.threshold - r.rating)}` : "Top tier",
-        inline: true,
-      },
+      { name: "Next tier", value: r.nextTier ? `${r.nextTier.label} in ${num(r.nextTier.threshold - r.rating)}` : "Top tier", inline: true },
       { name: "Rounds", value: num(r.rounds), inline: true },
       { name: "Wins", value: `${num(r.wins)} (${pct(r.wins, r.rounds)})`, inline: true },
       { name: "Avg place", value: s?.averagePosition ? s.averagePosition.toFixed(2) : "—", inline: true },
@@ -92,14 +79,13 @@ export async function renderStats(site, playerValue, regionValue) {
   }
   if (p.regions?.length > 1) {
     const other = p.regions.find((x) => x !== region);
-    if (other) fields.push({ name: "​", value: `Also ranked in ${REGIONS[other]?.label ?? other}: \`/stats player:${p.name} region:${other}\``, inline: false });
+    if (other) fields.push({ name: "​", value: `Also ranked in ${REGIONS[other]?.label ?? other}: \`/gr stats player:${p.name} region:${other}\``, inline: false });
   }
-
   const aliases = (p.aliases ?? []).filter((a) => a !== p.name).slice(0, 5);
   return {
     embeds: [
       {
-        title: `${p.name} — ${info.flag} ${info.label}`,
+        title: `${p.name} — ${info.label}`,
         url: site.playerUrl(p.id, region),
         description: aliases.length ? `Also known as ${aliases.map((a) => `\`${a}\``).join(", ")}` : undefined,
         color: tierColor(r?.tier),

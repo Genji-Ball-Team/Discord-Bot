@@ -1,4 +1,5 @@
-// Talking to Discord: checking that a request really came from Discord, and calling its REST API.
+// Talking to Discord: checking that a request really comes from Discord, and the few REST calls the
+// bot makes (post, edit and delete messages, open DMs).
 
 const API = "https://discord.com/api/v10";
 
@@ -8,9 +9,13 @@ export const ResponseType = {
   MESSAGE: 4,
   DEFERRED_MESSAGE: 5,
   DEFERRED_UPDATE: 6,
+  UPDATE_MESSAGE: 7,
   AUTOCOMPLETE: 8,
 };
 export const EPHEMERAL = 64;
+
+/** Nobody gets a notification from a message sent with this. */
+export const NO_PINGS = { parse: [] };
 
 function hexToBytes(hex) {
   if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) return null;
@@ -19,7 +24,7 @@ function hexToBytes(hex) {
   return bytes;
 }
 
-/** Discord signs every interaction with Ed25519. Anything that doesn't verify is rejected. */
+/** Discord signs every request with the app's key. Anything unsigned is refused. */
 export async function verifyRequest(request, publicKey) {
   const signature = hexToBytes(request.headers.get("X-Signature-Ed25519") ?? "");
   const timestamp = request.headers.get("X-Signature-Timestamp");
@@ -35,11 +40,19 @@ export async function verifyRequest(request, publicKey) {
   }
 }
 
-/**
- * A small Discord REST client. It retries once on a rate limit, and counts its calls so a cron run
- * stays under Cloudflare's limit on outgoing requests (50 per run on the free plan).
- */
+export class DiscordError extends Error {
+  constructor(status, message, code) {
+    super(`Discord ${status}: ${message}`);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** The channel or message is gone, or the bot can't see it any more. */
+export const lostAccess = (e) => e instanceof DiscordError && (e.status === 403 || e.status === 404);
+
 export class Discord {
+  /** `budget`: most requests this run may make (the free plan allows 50 subrequests a run). */
   constructor(env, budget = Infinity) {
     this.token = env.DISCORD_TOKEN;
     this.appId = env.DISCORD_APPLICATION_ID;
@@ -57,11 +70,7 @@ export class Discord {
       this.used++;
       const headers = { "Content-Type": "application/json" };
       if (auth) headers.Authorization = `Bot ${this.token}`;
-      const res = await fetch(API + path, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
+      const res = await fetch(API + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
       if (res.status === 429 && attempt === 0) {
         const info = await res.json().catch(() => ({}));
         const wait = Math.min(Number(info.retry_after ?? 1), 5);
@@ -88,28 +97,11 @@ export class Discord {
     return this.call("PATCH", `/channels/${channelId}/messages/${messageId}`, message);
   }
 
-  react(channelId, messageId, emoji) {
-    return this.call("PUT", `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`);
-  }
-
-  reactions(channelId, messageId, emoji, after) {
-    const q = new URLSearchParams({ limit: "100" });
-    if (after) q.set("after", after);
-    return this.call("GET", `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}?${q}`);
+  deleteMessage(channelId, messageId) {
+    return this.call("DELETE", `/channels/${channelId}/messages/${messageId}`);
   }
 
   openDm(userId) {
     return this.call("POST", "/users/@me/channels", { recipient_id: userId });
   }
 }
-
-export class DiscordError extends Error {
-  constructor(status, message, code) {
-    super(`Discord ${status}: ${message}`);
-    this.status = status;
-    this.code = code;
-  }
-}
-
-/** Never let a message ping anyone unless asked: names show, nobody is notified. */
-export const NO_PINGS = { parse: [] };

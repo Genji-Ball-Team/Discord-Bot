@@ -2,8 +2,8 @@ name = "genjiball-discord-bot"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
-# Every minute: tourney reminder DMs. Every TOURNEY_REFRESH_MINUTES: tourney posts.
-# Every LEADERBOARD_REFRESH_MINUTES: live leaderboards.
+# Every minute: tournament confirm DMs and lists. Every TOURNEY_REFRESH_MINUTES: the site's new or
+# changed tourneys. Every LEADERBOARD_REFRESH_MINUTES: live leaderboards.
 [triggers]
 crons = ["* * * * *"]
 
@@ -17,29 +17,30 @@ database_id = "436cac8d-7325-44c7-9d83-cb22cbe17e86"
 DISCORD_APPLICATION_ID = "1556986418239115295"
 DISCORD_PUBLIC_KEY = "8d2c76d55758fea1e5f5486946b95ca31783fda2c6348b5d6e3be643c1cab2e2"
 
-# The website the bot reads.
+# The Genji Ball server: npm run register puts the /gr commands here.
+DISCORD_GUILD_ID = "1110543205482627102"
+
+# The website the bot reads. It never changes it.
 SITE_URL = "https://genjiball.us"
 
-# The "staff" role: members with it (and server admins) can use /setup and /leaderboard.
-# Everyone can use /stats. Right-click the role → Copy Role ID.
+# Staff: members with this role (and server admins) can use everything but /gr stats.
+# Right-click the role → Copy Role ID (needs Developer Mode on).
 STAFF_ROLE_ID = "1199414765055901737"
 
-# Where genjiball.us's tourneys are announced. Right-click the channel → Copy Channel ID.
-# Leave empty to post none.
-TOURNEY_CHANNEL_ID = "1195505822214668328"
+# Where the site's tourneys get their sign-up post and list. Right-click the channel → Copy Channel ID.
+# Empty: no tourney posts.
+TOURNEY_CHANNEL_ID = "1548176545770901514"
 
-# Roles pinged when a tourney is announced. Right-click the role in Discord → Copy Role ID
-# (needs Developer Mode on). Leave empty to ping nobody.
-EU_ROLE_ID = "1110566266814615584"
-NA_ROLE_ID = "1110566315879571517"
+# Where tournament match results (wins, kills, rating changes) are posted. Empty: none.
+RESULTS_CHANNEL_ID = "1548176572110868551"
 
-# How often the tourney posts are brought up to date (sign-up count, status, standings), in minutes (1–60).
+# How often the bot looks for new, renamed, moved or cancelled tourneys on the site, in minutes (1–60).
 TOURNEY_REFRESH_MINUTES = "5"
 
-# How often the live leaderboard (/setup leaderboard) updates, in minutes (1–60).
+# Minutes before the start that the Confirm DMs go out. Unconfirmed players aren't on the list.
+CONFIRM_MINUTES = "5"
+
+# How often the live leaderboard (/gr setup leaderboard) updates, in minutes (1–60).
 LEADERBOARD_REFRESH_MINUTES = "5"
 
-# Minutes before a tourney starts that the "Remind me" DMs go out.
-REMINDER_MINUTES = "5"
-
-# The bot token is a secret: set it with `npx wrangler secret put DISCORD_TOKEN`, never here.
+# The bot token is a secret: `npx wrangler secret put DISCORD_TOKEN`, never here.

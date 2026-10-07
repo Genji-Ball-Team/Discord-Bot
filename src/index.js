@@ -1,27 +1,29 @@
-// Genji Ball Discord bot: a Cloudflare Worker. Discord sends slash commands and button presses to
-// it over HTTPS (the "Interactions Endpoint URL"), and a cron runs the reminders and refreshes.
+// The Worker: Discord sends every slash command and button press to /interactions, and the cron
+// runs every minute: tournament DMs and lists, the site's new tourneys, tournament results, the
+// live leaderboards.
+//
+// All commands are under /gr. Everyone can use /gr stats; the rest is for Staff (STAFF_ROLE_ID, or
+// server admins).
 
-import { Discord, EPHEMERAL, InteractionType, ResponseType, verifyRequest } from "./discord.js";
+import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
+import { postResults } from "./results.js";
 import { Site } from "./site.js";
 import { autocompletePlayers, renderStats } from "./stats.js";
-import { cancelTournament, hostTournament, runReminders } from "./tournament.js";
+import { confirmButton, parseTourneyButton, refreshPostById, runTournaments, signupButton, syncTourneys, tourneyMinutes } from "./tournament.js";
 
-const json = (data, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+const privateReply = (content) => json({ type: ResponseType.MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: NO_PINGS } });
 
-/**
- * Slash command options as { name: value }, with the subcommand path ("cancel") and the option
- * being typed in, for autocomplete.
- */
+/** `/gr <group> <sub> options…` → { path: ["host", "tournament"], options, focused }. */
 export function optionsOf(data) {
+  const path = [];
   const options = {};
-  let sub = null;
   let focused = null;
   const walk = (list = []) => {
     for (const o of list) {
       if (o.type === 1 || o.type === 2) {
-        sub = o.name;
+        path.push(o.name);
         walk(o.options);
       } else {
         options[o.name] = o.value;
@@ -30,15 +32,24 @@ export function optionsOf(data) {
     }
   };
   walk(data?.options);
-  return { sub, options, focused };
+  return { path, options, focused };
 }
 
 const refreshMinutes = (env) => Math.max(1, Number(env.LEADERBOARD_REFRESH_MINUTES) || 5);
 
-/**
- * /setup leaderboard: posts the live leaderboard in a channel, or refreshes the one already there.
- * The cron keeps it up to date. One per channel; delete the message to stop it.
- */
+const ADMINISTRATOR = 1n << 3n;
+
+export function isStaff(env, member) {
+  if (!member) return false;
+  const staffRole = (env.STAFF_ROLE_ID ?? "").trim();
+  if (staffRole && member.roles?.includes(staffRole)) return true;
+  try {
+    return (BigInt(member.permissions ?? "0") & ADMINISTRATOR) !== 0n;
+  } catch {
+    return false;
+  }
+}
+
 async function setupLeaderboard(env, discord, site, interaction, channelId) {
   const { message } = await renderLeaderboard(site, "eu", 1, { live: true, refreshMinutes: refreshMinutes(env) });
   const existing = await env.DB.prepare("SELECT message_id FROM boards WHERE channel_id = ?").bind(channelId).first();
@@ -48,7 +59,7 @@ async function setupLeaderboard(env, discord, site, interaction, channelId) {
       await discord.editMessage(channelId, existing.message_id, message);
       messageId = existing.message_id;
     } catch (e) {
-      if (e.status !== 404) throw e; // deleted: post a new one
+      if (e.status !== 404) throw e;
     }
   }
   if (!messageId) {
@@ -67,113 +78,74 @@ async function setupLeaderboard(env, discord, site, interaction, channelId) {
   return `The live leaderboard is in <#${channelId}>. It updates every ${refreshMinutes(env)} minutes. Delete the message to stop it.`;
 }
 
-/** Something went wrong after we deferred: say so instead of leaving "thinking…" forever. */
 async function failSoftly(discord, token, error) {
   console.error(error);
-  await discord.editOriginal(token, { content: "Something went wrong talking to the site or Discord. Try again in a minute.", embeds: [], components: [] }).catch(() => null);
+  await discord
+    .editOriginal(token, { content: "Something went wrong talking to the site or Discord. Try again in a minute.", embeds: [], components: [] })
+    .catch(() => null);
 }
 
-const STAFF_COMMANDS = new Set(["host", "setup", "leaderboard"]);
-const ADMINISTRATOR = 1n << 3n;
-
-/** Staff: has the STAFF_ROLE_ID role, or is a server admin (so the owner can't lock themselves out). */
-export function isStaff(env, member) {
-  if (!member) return false;
-  const staffRole = (env.STAFF_ROLE_ID ?? "").trim();
-  if (staffRole && member.roles?.includes(staffRole)) return true;
-  try {
-    return (BigInt(member.permissions ?? "0") & ADMINISTRATOR) !== 0n;
-  } catch {
-    return false;
-  }
+/** Runs `work` after answering Discord (it wants an answer within 3 seconds), then edits the answer. */
+function deferred(ctx, discord, interaction, work, { ephemeral = false } = {}) {
+  ctx.waitUntil(
+    (async () => {
+      try {
+        const result = await work();
+        const message = typeof result === "string" ? { content: result, allowed_mentions: NO_PINGS } : result;
+        await discord.editOriginal(interaction.token, message);
+      } catch (e) {
+        await failSoftly(discord, interaction.token, e);
+      }
+    })(),
+  );
+  return json({ type: ResponseType.DEFERRED_MESSAGE, data: ephemeral ? { flags: EPHEMERAL } : undefined });
 }
 
 async function handleCommand(env, ctx, interaction) {
+  if (interaction.data.name !== "gr") return privateReply("I don't know that command. All my commands start with `/gr`.");
   const discord = new Discord(env);
   const site = new Site(env);
-  const { sub, options } = optionsOf(interaction.data);
-  const name = interaction.data.name;
+  const { path, options } = optionsOf(interaction.data);
+  const command = path.join(" ");
 
-  if (STAFF_COMMANDS.has(name)) {
-    if (!interaction.guild_id) {
-      return json({ type: ResponseType.MESSAGE, data: { content: "Use this in the server, not in DMs.", flags: EPHEMERAL } });
-    }
-    if (!isStaff(env, interaction.member)) {
-      return json({ type: ResponseType.MESSAGE, data: { content: "Only **Staff** can use this command. Everyone can use `/stats`.", flags: EPHEMERAL } });
-    }
+  if (command === "stats") {
+    return deferred(ctx, discord, interaction, () => renderStats(site, options.player, options.region));
   }
 
-  if (name === "leaderboard") {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          const { message } = await renderLeaderboard(site, options.region, options.page);
-          await discord.editOriginal(interaction.token, message);
-        } catch (e) {
-          await failSoftly(discord, interaction.token, e);
-        }
-      })(),
-    );
-    return json({ type: ResponseType.DEFERRED_MESSAGE });
-  }
+  // Everything else is staff only, and only in the server.
+  if (!interaction.guild_id) return privateReply("Use this in the server, not in DMs.");
+  if (!isStaff(env, interaction.member)) return privateReply("Only **Staff** can use this. Everyone can use `/gr stats`.");
 
-  if (name === "stats") {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          await discord.editOriginal(interaction.token, await renderStats(site, options.player, options.region));
-        } catch (e) {
-          await failSoftly(discord, interaction.token, e);
-        }
-      })(),
-    );
-    return json({ type: ResponseType.DEFERRED_MESSAGE });
+  switch (command) {
+    case "leaderboard":
+      return deferred(ctx, discord, interaction, async () => (await renderLeaderboard(site, options.region, options.page)).message);
+    case "setup leaderboard":
+      return deferred(ctx, discord, interaction, () => setupLeaderboard(env, discord, site, interaction, options.channel ?? interaction.channel_id), {
+        ephemeral: true,
+      });
+    default:
+      return privateReply("I don't know that command.");
   }
-
-  if (name === "setup") {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          const reply = await setupLeaderboard(env, discord, site, interaction, options.channel ?? interaction.channel_id);
-          await discord.editOriginal(interaction.token, { content: reply, allowed_mentions: { parse: [] } });
-        } catch (e) {
-          await failSoftly(discord, interaction.token, e);
-        }
-      })(),
-    );
-    return json({ type: ResponseType.DEFERRED_MESSAGE, data: { flags: EPHEMERAL } });
-  }
-
-  if (name === "host") {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          const reply =
-            sub === "cancel"
-              ? await cancelTournament(env, discord, interaction, options)
-              : await hostTournament(env, discord, interaction, options);
-          await discord.editOriginal(interaction.token, { content: reply, allowed_mentions: { parse: [] } });
-        } catch (e) {
-          await failSoftly(discord, interaction.token, e);
-        }
-      })(),
-    );
-    return json({ type: ResponseType.DEFERRED_MESSAGE, data: { flags: EPHEMERAL } });
-  }
-
-  return json({ type: ResponseType.MESSAGE, data: { content: "I don't know that command.", flags: EPHEMERAL } });
 }
 
 async function handleButton(env, ctx, interaction) {
+  const tourney = parseTourneyButton(interaction.data.custom_id);
+  if (tourney?.action === "conf") {
+    const message = await confirmButton(env, interaction, tourney.id);
+    return json({ type: ResponseType.UPDATE_MESSAGE, data: message });
+  }
+  if (tourney) {
+    const { reply, changed } = await signupButton(env, interaction, tourney.action, tourney.id);
+    if (changed) ctx.waitUntil(refreshPostById(env, new Discord(env), tourney.id).catch((e) => console.error("refresh post", e)));
+    return privateReply(reply);
+  }
+
   const target = parseButton(interaction.data.custom_id);
   if (!target) return json({ type: ResponseType.DEFERRED_UPDATE });
   const discord = new Discord(env);
   const site = new Site(env);
-  // On the live board, a button opens a private copy for the presser, so the channel's board stays
-  // put for everyone else. Anywhere else (a /leaderboard post, a private copy) it flips the message.
-  const live = interaction.message?.id
-    ? await env.DB.prepare("SELECT 1 FROM boards WHERE message_id = ?").bind(interaction.message.id).first()
-    : null;
+  // The live board stays the same for everyone: its buttons open a private copy.
+  const live = interaction.message?.id ? await env.DB.prepare("SELECT 1 FROM boards WHERE message_id = ?").bind(interaction.message.id).first() : null;
   ctx.waitUntil(
     (async () => {
       try {
@@ -195,7 +167,6 @@ async function handleAutocomplete(env, interaction) {
   return json({ type: ResponseType.AUTOCOMPLETE, data: { choices } });
 }
 
-/** Re-renders every live leaderboard, oldest refresh first, as far as this run's budget goes. */
 async function refreshBoards(env, discord, site, budget) {
   const { results } = await env.DB.prepare("SELECT * FROM boards ORDER BY refreshed_at").all();
   for (const b of results) {
@@ -205,7 +176,6 @@ async function refreshBoards(env, discord, site, budget) {
       await discord.editMessage(b.channel_id, b.message_id, message);
       await env.DB.prepare("UPDATE boards SET refreshed_at = ? WHERE channel_id = ?").bind(Date.now(), b.channel_id).run();
     } catch (e) {
-      // The message or channel is gone, or we lost access: stop refreshing it.
       if (e.status === 404 || e.status === 403) await env.DB.prepare("DELETE FROM boards WHERE channel_id = ?").bind(b.channel_id).run();
       else console.error(e);
     }
@@ -224,7 +194,6 @@ export default {
     const { ok, body } = await verifyRequest(request, env.DISCORD_PUBLIC_KEY);
     if (!ok) return new Response("Bad signature", { status: 401 });
     const interaction = JSON.parse(body);
-
     switch (interaction.type) {
       case InteractionType.PING:
         return json({ type: ResponseType.PONG });
@@ -239,19 +208,24 @@ export default {
     }
   },
 
-  async scheduled(event, env, ctx) {
-    // The free plan allows 50 outgoing requests per run; keep a margin.
+  async scheduled(event, env) {
+    // The free plan allows 50 outgoing requests a run: keep a few spare.
     const discord = new Discord(env, 45);
-    try {
-      await runReminders(env, discord, event.scheduledTime ?? Date.now());
-    } catch (e) {
-      console.error("reminders", e);
+    const site = new Site(env);
+    const budget = () => discord.left - site.calls;
+    const now = event.scheduledTime ?? Date.now();
+    const minute = new Date(now).getUTCMinutes();
+    // DMs and lists first: they can't wait. Then new or changed tourneys from the site.
+    await runTournaments(env, discord, site, budget, now).catch((e) => console.error("tournaments", e));
+    if (minute % tourneyMinutes(env) === 0) {
+      await syncTourneys(env, discord, site, budget, now).catch((e) => console.error("tourney sync", e));
     }
-    const minute = new Date(event.scheduledTime ?? Date.now()).getUTCMinutes();
+    // Tournament results: the site rates matches every 10 minutes, so every 5 is soon enough.
+    if (minute % 5 === 2) {
+      await postResults(env, discord, site, budget).catch((e) => console.error("results", e));
+    }
     if (minute % refreshMinutes(env) === 0) {
-      // Each board costs up to 2 site requests and 1 Discord request, all inside the run's budget.
-      const site = new Site(env);
-      await refreshBoards(env, discord, site, () => discord.left - site.calls).catch((e) => console.error("boards", e));
+      await refreshBoards(env, discord, site, budget).catch((e) => console.error("boards", e));
     }
   },
 };
