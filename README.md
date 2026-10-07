@@ -44,7 +44,9 @@ npm run deploy
 
 Changed the commands (`scripts/commands.js`)? Also `npm run register`: it asks for the bot token and puts the commands in the Genji Ball server (`DISCORD_GUILD_ID`), where they show up at once.
 
-First time only, or after adding a table to `schema.sql`: `npm run db:setup`.
+First time only, or after adding a table to `schema.sql`: `npm run db:setup`, **before** `npm run deploy`, so the new tables are there when the new code runs.
+
+Deploy only to the Genji Ball Cloudflare account, the one genjiball.us is on: check `npx wrangler whoami` first, never a personal account.
 
 The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secret put DISCORD_TOKEN`.
 
@@ -61,3 +63,4 @@ The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secre
 - **Limits:** the free Cloudflare plan allows about 45 Discord requests a minute, so the bot sends about 20 Confirm DMs a minute: 100 within the 5 minutes.
 - **Where everything comes from:** genjiball.us's public API. The bot never changes the site.
 - `npm test` runs the tests (Node 22.5 or newer).
+- Working on the code? Read [AGENTS.md](AGENTS.md), and open a PR with the template: CI runs `npm test` on it.
