@@ -3,7 +3,7 @@
 
 const API = "https://discord.com/api/v10";
 
-export const InteractionType = { PING: 1, COMMAND: 2, COMPONENT: 3, AUTOCOMPLETE: 4 };
+export const InteractionType = { PING: 1, COMMAND: 2, COMPONENT: 3, AUTOCOMPLETE: 4, MODAL_SUBMIT: 5 };
 export const ResponseType = {
   PONG: 1,
   MESSAGE: 4,
@@ -11,6 +11,7 @@ export const ResponseType = {
   DEFERRED_UPDATE: 6,
   UPDATE_MESSAGE: 7,
   AUTOCOMPLETE: 8,
+  MODAL: 9,
 };
 export const EPHEMERAL = 64;
 
