@@ -13,18 +13,21 @@ CREATE TABLE IF NOT EXISTS tournaments (
   list_message_id TEXT,                -- the list of confirmed players
   results_message_id TEXT,             -- the standings, once the site has them
   created_by TEXT NOT NULL,            -- 'site' (kept for older rows)
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  signups INTEGER                      -- the site's sign-up count the post shows (with SITE_TOKEN), page sign-ups included
 );
 CREATE INDEX IF NOT EXISTS tournaments_phase ON tournaments (phase, starts_at);
 
 -- Who registered. `confirmed`: pressed Confirm in the DM, or registered during the confirm minutes.
+-- With SITE_TOKEN they're on the site's sign-up list too, the one list both show.
 CREATE TABLE IF NOT EXISTS entrants (
   tournament_id INTEGER NOT NULL,
   user_id TEXT NOT NULL,
-  name TEXT NOT NULL,                  -- their server name when they registered
+  name TEXT NOT NULL,                  -- the in-game name they gave (before the site sync: their server name)
   registered_at INTEGER NOT NULL,      -- ms
   confirmed INTEGER NOT NULL DEFAULT 0,
   dm_status TEXT NOT NULL DEFAULT 'none', -- none, pending, sent, failed (DMs closed)
+  on_site INTEGER NOT NULL DEFAULT 0,  -- 1: the site has their sign-up; 0: the cron still has to send it; 2: the site refused the name
   PRIMARY KEY (tournament_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS entrants_dm ON entrants (tournament_id, dm_status);

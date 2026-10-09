@@ -42,11 +42,24 @@ export function fakeLeaderboard(region, total = 80) {
   }));
 }
 
+/** A tourney's sign-ups on the fake site: `{ name, discordUserId, signedUpAt, removed }`, first come first. */
+function signupsOf(siteSignups, id) {
+  if (!siteSignups.has(id)) siteSignups.set(id, []);
+  return siteSignups.get(id);
+}
+
 /**
  * Installs a fake fetch. Discord and site calls are recorded in `calls`; `closedDms` users answer
- * 403 to a DM; `siteTourneys` is the site's tourneys by id.
+ * 403 to a DM; `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id.
  */
-export function installFetch({ closedDms = new Set(), boardTotal = 80, siteTourneys = new Map(), siteDown = false, feed = { entries: [], details: new Map() } } = {}) {
+export function installFetch({
+  closedDms = new Set(),
+  boardTotal = 80,
+  siteTourneys = new Map(),
+  siteSignups = new Map(),
+  siteDown = false,
+  feed = { entries: [], details: new Map() },
+} = {}) {
   const calls = [];
   let nextTourney = 41;
   let nextId = 5000;
@@ -59,6 +72,39 @@ export function installFetch({ closedDms = new Set(), boardTotal = 80, siteTourn
 
     if (url.hostname === "genjiball.us") {
       calls.push({ site: true, method, path: url.pathname + url.search, body, auth: init.headers?.Authorization });
+      // The bot's sign-ups (genjiball-ranked src/tourney/botSignups.ts), on `siteSignups`.
+      const bot = /^\/api\/bot\/tourneys\/(\d+)\/signups(?:\/(\d+|[a-z]\w*))?$/.exec(url.pathname);
+      if (bot) {
+        if (init.headers?.Authorization !== "Bearer site-token") return reply({ error: "unauthorized" }, 401);
+        if (siteDown) return reply({ error: "internal" }, 500);
+        const tourney = siteTourneys.get(Number(bot[1]));
+        if (!tourney) return reply({ error: "not_found" }, 404);
+        const list = signupsOf(siteSignups, tourney.id);
+        const state = () => {
+          const count = list.filter((s) => !s.removed).length;
+          return { capacity: 10, signups: { open: tourney.status === "scheduled", count, full: count >= 10 } };
+        };
+        if (method === "GET") return reply({ status: tourney.status, ...state(), entries: list.filter((s) => !s.removed) });
+        if (tourney.status !== "scheduled") return reply({ error: "closed" }, 409);
+        if (method === "DELETE") {
+          const i = list.findIndex((s) => s.discordUserId === bot[2] && !s.removed);
+          const [gone] = i >= 0 ? list.splice(i, 1) : [];
+          return reply({ removed: Boolean(gone), name: gone?.name ?? null, ...state() });
+        }
+        const results = body.signups.map(({ discordUserId, name }) => {
+          const own = list.find((s) => s.discordUserId === discordUserId);
+          const named = list.find((s) => s.name.toLowerCase() === name.toLowerCase());
+          let status = "created";
+          if (own) status = own.removed ? "removed" : "exists";
+          else if (named?.removed) status = "removed";
+          else if (named) status = named.discordUserId ? "name_taken" : "linked";
+          if (status === "linked") named.discordUserId = discordUserId;
+          if (status === "created") list.push({ name, discordUserId, signedUpAt: "2026-10-06T10:00:00Z" });
+          const row = list.find((s) => s.discordUserId === discordUserId && !s.removed);
+          return { discordUserId, status, signup: row ? { name: row.name, signedUpAt: row.signedUpAt } : null };
+        });
+        return reply({ results, ...state() }, 201);
+      }
       if (url.pathname.startsWith("/api/admin/")) {
         if (init.headers?.Authorization !== "Bearer admin-token") return reply({ error: "unauthorized", message: "No admin token" }, 401);
         if (siteDown) return reply({ error: "internal", message: "Internal error" }, 500);
@@ -92,7 +138,9 @@ export function installFetch({ closedDms = new Set(), boardTotal = 80, siteTourn
       }
       if (url.pathname === "/api/tourneys") {
         if (siteDown) return reply({ error: "internal" }, 500);
-        const mine = [...siteTourneys.values()].filter((t) => t.region === (url.searchParams.get("region") ?? "eu"));
+        const mine = [...siteTourneys.values()]
+          .filter((t) => t.region === (url.searchParams.get("region") ?? "eu"))
+          .map((t) => ({ ...t, signups: { open: t.status === "scheduled", count: signupsOf(siteSignups, t.id).filter((s) => !s.removed).length } }));
         const upcoming = mine.filter((t) => t.status === "scheduled" || t.status === "live").sort((a, b) => a.startsAt.localeCompare(b.startsAt));
         const past = mine.filter((t) => t.status === "done" || t.status === "cancelled");
         return reply({ region: url.searchParams.get("region"), page: 1, upcoming, past });
