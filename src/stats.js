@@ -1,6 +1,7 @@
 // /gr stats: one player's rating and stats from the site, and the name autocomplete.
 
-import { REGIONS, regionOf, tierColor } from "./site.js";
+import { NO_PINGS } from "./discord.js";
+import { REGIONS, escapeMarkdown, regionOf, tierColor } from "./site.js";
 
 export async function autocompletePlayers(site, text, regionValue) {
   const query = (text ?? "").trim();
@@ -30,7 +31,7 @@ const num = (n) => (n === null || n === undefined ? "—" : Math.round(n).toLoca
 export async function renderStats(site, playerValue, regionValue) {
   const asked = regionValue ? regionOf(regionValue) : null;
   const id = await resolvePlayer(site, playerValue, asked ?? undefined);
-  if (!id) return { content: `I couldn't find a player called **${String(playerValue).slice(0, 50)}**.` };
+  if (!id) return { content: `I couldn't find a player called **${escapeMarkdown(String(playerValue).slice(0, 50))}**.` };
 
   let region = asked ?? "eu";
   let profile = await site.player(id, region);
@@ -93,6 +94,6 @@ export async function renderStats(site, playerValue, regionValue) {
         footer: { text: r?.inactiveSince ? "Inactive · genjiball.us" : "genjiball.us" },
       },
     ],
-    allowed_mentions: { parse: [] },
+    allowed_mentions: NO_PINGS,
   };
 }

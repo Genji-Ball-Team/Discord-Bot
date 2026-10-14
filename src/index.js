@@ -10,6 +10,7 @@ import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { postResults } from "./results.js";
 import { Site, signsUp } from "./site.js";
 import { autocompletePlayers, renderStats } from "./stats.js";
+import { minutes } from "./time.js";
 import {
   confirmButton,
   formName,
@@ -45,7 +46,7 @@ export function optionsOf(data) {
   return { path, options, focused };
 }
 
-const refreshMinutes = (env) => Math.max(1, Number(env.LEADERBOARD_REFRESH_MINUTES) || 5);
+const refreshMinutes = (env) => minutes(env.LEADERBOARD_REFRESH_MINUTES);
 
 const ADMINISTRATOR = 1n << 3n;
 
@@ -101,8 +102,8 @@ function deferred(ctx, discord, interaction, work, { ephemeral = false } = {}) {
     (async () => {
       try {
         const result = await work();
-        const message = typeof result === "string" ? { content: result, allowed_mentions: NO_PINGS } : result;
-        await discord.editOriginal(interaction.token, message);
+        const message = typeof result === "string" ? { content: result } : result;
+        await discord.editOriginal(interaction.token, { allowed_mentions: NO_PINGS, ...message });
       } catch (e) {
         await failSoftly(discord, interaction.token, e);
       }

@@ -17,14 +17,12 @@
 // the site's, names typed on the tourney's page included. Registrations from before SITE_TOKEN are
 // sent on the sync. Without SITE_TOKEN the bot keeps its own list, as before.
 
-import { NO_PINGS, lostAccess } from "./discord.js";
+import { NO_PINGS, RED, lostAccess } from "./discord.js";
 import { REGIONS, escapeMarkdown, signsUp } from "./site.js";
-import { discordTime } from "./time.js";
+import { discordTime, minutes } from "./time.js";
 
-export const confirmMinutes = (env) => Math.max(1, Number(env.CONFIRM_MINUTES) || 5);
+export const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
 const signupChannel = (env) => (env.TOURNEY_CHANNEL_ID ?? "").trim();
-// Red, like the leaderboard.
-const colorOf = () => 0xed4245;
 const MESSAGE_MAX = 2000;
 /** How long after the start the bot still looks for the standings on the site. */
 const RESULTS_WINDOW_SECONDS = 3 * 24 * 3600;
@@ -71,14 +69,14 @@ function signupPost(env, t, counts) {
       {
         title: cancelled ? `~~🏆 ${name}~~ · Cancelled` : confirming ? `🏆 ${name} · confirming now` : `🏆 ${name}`,
         description: lines.join("\n"),
-        color: cancelled ? 0x808080 : colorOf(t.region),
+        color: cancelled ? 0x808080 : RED,
         fields,
         footer: {
           text: cancelled
             ? `Tournament #${t.id}`
             : confirming
               ? "Only confirmed players go on the list"
-              : `Sign-ups close ${confirmMinutes(env)} minutes before the start · Tournament #${t.id}`,
+              : `Sign-ups close at the start · Tournament #${t.id}`,
         },
       },
     ],
@@ -149,7 +147,7 @@ function resultsMessage(site, t) {
       {
         title: `🏁 ${t.name.slice(0, 200)}: standings`,
         url: site.tourneyUrl(t.id),
-        color: colorOf(t.region),
+        color: RED,
         fields,
         footer: { text: "Most rounds won first, ties broken by kills. ✅: checked by an admin against the final screenshot." },
       },
@@ -187,7 +185,7 @@ async function refreshPost(env, discord, t) {
 
 // ---- Following the site's tourneys ----
 
-export const tourneyMinutes = (env) => Math.max(1, Number(env.TOURNEY_REFRESH_MINUTES) || 5);
+export const tourneyMinutes = (env) => minutes(env.TOURNEY_REFRESH_MINUTES);
 const toUnix = (iso) => Math.floor(Date.parse(iso) / 1000);
 
 /**
@@ -603,7 +601,7 @@ async function start(env, discord, site, t) {
 }
 
 /** After the start: posts the standings under the list once the site has them. */
-async function postResults(env, discord, site, t) {
+async function postStandings(env, discord, site, t) {
   const data = await site.tourney(t.id).catch(() => null);
   const results = data?.tourney ? resultsMessage(site, data.tourney) : null;
   if (!results) return;
@@ -652,7 +650,7 @@ export async function runTournaments(env, discord, site, budget, nowMs = Date.no
       }
       else await sendConfirmDms(env, discord, t, budget);
     } else if (t.phase === "started" && checkResults) {
-      await postResults(env, discord, site, t);
+      await postStandings(env, discord, site, t);
     }
   }
 }

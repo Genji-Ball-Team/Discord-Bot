@@ -7,6 +7,7 @@ import { parseButton, renderLeaderboard } from "../src/leaderboard.js";
 import { Site } from "../src/site.js";
 import { listMessages } from "../src/tournament.js";
 import { resultsPost } from "../src/results.js";
+import { minutes } from "../src/time.js";
 import { ENV, STAFF, fakeCtx, fakeD1, installFetch } from "./helpers.js";
 
 // ---------- signed requests, as Discord sends them ----------
@@ -104,6 +105,16 @@ test("staff commands are staff only; everyone can use /gr stats", async () => {
   assert.equal((await send(e, { ...gr("leaderboard", null, []), member: admin })).type, 5);
 });
 
+test("a /gr stats name that isn't found is echoed escaped, pinging nobody", async () => {
+  const calls = installFetch();
+  await send(env(), { ...gr("stats", null, [opt("player", "@everyone *nobody*")]), member: player("p1") });
+  assert.deepEqual(lastOriginal(calls), { allowed_mentions: { parse: [] }, content: "I couldn't find a player called **@everyone \\*nobody\\***." });
+});
+
+test("minutes settings default to 5 and stay within 1 to 60", () => {
+  assert.deepEqual(["", "abc", "0", "-3", "10", "90"].map((v) => minutes(v)), [5, 5, 5, 1, 10, 60]);
+});
+
 // ---------- the whole tournament ----------
 
 test("a tourney made on the site, from its sign-up post to the final list", async () => {
@@ -128,6 +139,8 @@ test("a tourney made on the site, from its sign-up post to the final list", asyn
   assert.match(post.body.embeds[0].description, /<t:1791658800:F>/);
   assert.deepEqual(post.body.components[0].components.map((b) => b.label), ["Register", "Unregister", "Who's signed up"]);
   assert.equal(post.body.components[0].components[0].style, 3); // green
+  // Registering stays open until the start (and confirms at once in the last minutes).
+  assert.equal(post.body.embeds[0].footer.text, `Sign-ups close at the start · Tournament #${id}`);
 
   // Four players register; one leaves again.
   for (const p of ["p1", "p2", "p3", "p4"]) {

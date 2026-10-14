@@ -18,6 +18,9 @@ export const EPHEMERAL = 64;
 /** Nobody gets a notification from a message sent with this. */
 export const NO_PINGS = { parse: [] };
 
+/** The colour of the bot's embeds: the leaderboard, tourney posts and results. */
+export const RED = 0xed4245;
+
 function hexToBytes(hex) {
   if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) return null;
   const bytes = new Uint8Array(hex.length / 2);
