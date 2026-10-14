@@ -620,7 +620,8 @@ async function start(env, discord, site, t, budget) {
     .bind(t.id)
     .all();
   const messages = listMessages(t, results.map((r) => r.user_id), siteOnly);
-  if (budget() < messages.length + 1) return;
+  // Two requests a message (Discord.call retries a 429 once), and the delete.
+  if (budget() < messages.length * 2 + 1) return;
   let listId = null;
   for (const content of messages) {
     const message = await discord.sendMessage(t.channel_id, { content, allowed_mentions: NO_PINGS }).catch((e) => {

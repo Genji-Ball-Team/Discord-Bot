@@ -288,22 +288,32 @@ test("a long list is split under 2,000 characters", () => {
 test("a list the run can't send whole waits for the next run, and is posted once", async () => {
   const e = env();
   const siteTourneys = new Map();
-  const calls = installFetch({ siteTourneys });
+  // Every list message is rate limited once: each costs two requests.
+  let tries = 0;
+  const rateLimited = ({ method, path }) => method === "POST" && path === "/channels/signups/messages" && ++tries % 2 === 1 && 429;
+  let limit = false;
+  const calls = installFetch({ siteTourneys, discordDown: (c) => limit && rateLimited(c) });
   const t = siteTourney(siteTourneys);
   await cron(e, NOW);
-  // 300 confirmed players: five list messages.
-  for (let i = 0; i < 300; i++) {
+  // 180 confirmed players: three list messages.
+  for (let i = 0; i < 180; i++) {
     e.DB.raw.prepare("INSERT INTO entrants (tournament_id, user_id, name, registered_at, confirmed) VALUES (?, ?, 'x', ?, 1)").run(t.id, `1234567890123456${String(i).padStart(3, "0")}`, i);
   }
   e.DB.raw.prepare("UPDATE tournaments SET phase = 'confirming' WHERE id = ?").run(t.id);
+  assert.equal(listMessages(t, Array(180).fill("1234567890123456789")).length, 3);
 
-  // A run with only four requests left: the last look at the site, then not enough for the list.
-  const discord = new Discord(e, 4);
+  // Five requests left: the last look at the site, then four, not enough for three messages and their retries.
+  limit = true;
+  const discord = new Discord(e, 5);
   const site = new Site(e);
   await runTournaments(e, discord, site, () => discord.left - site.calls, START);
-  assert.equal(posts(calls, "signups").length, 1);
+  // Every post after the sign-up post is part of the list.
+  const lists = () => posts(calls, "signups").length - 1;
+  assert.equal(lists(), 0);
   await cron(e, START + 60_000);
-  assert.equal(posts(calls, "signups").length, 1 + 5);
+  // Three messages, each tried twice.
+  assert.equal(lists(), 6);
+  assert.equal((await e.DB.prepare("SELECT phase FROM tournaments WHERE id = ?").bind(t.id).first()).phase, "started");
 });
 
 test("tourneys waiting for their standings don't hold up a starting one", async () => {
