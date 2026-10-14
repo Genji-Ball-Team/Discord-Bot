@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { commands } from "../scripts/commands.js";
 import worker, { optionsOf } from "../src/index.js";
 import { parseButton, renderLeaderboard } from "../src/leaderboard.js";
@@ -15,6 +15,7 @@ const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 const PUBLIC_KEY_HEX = publicKey.export({ format: "der", type: "spki" }).subarray(-32).toString("hex");
 
 function env(extra = {}) {
+  clock = NOW;
   return { ...ENV, DISCORD_PUBLIC_KEY: PUBLIC_KEY_HEX, DB: fakeD1(), ...extra };
 }
 
@@ -27,10 +28,16 @@ async function send(e, interaction) {
     headers: { "X-Signature-Ed25519": signature, "X-Signature-Timestamp": timestamp },
     body,
   });
-  const ctx = fakeCtx();
-  const res = await worker.fetch(request, e, ctx);
-  await ctx.done();
-  return res.json();
+  // A button press happens at the time of the last cron run, whatever today's date.
+  const now = mock.method(Date, "now", () => clock);
+  try {
+    const ctx = fakeCtx();
+    const res = await worker.fetch(request, e, ctx);
+    await ctx.done();
+    return res.json();
+  } finally {
+    now.mock.restore();
+  }
 }
 
 const gr = (group, sub, options = []) => ({
@@ -52,12 +59,15 @@ const posts = (calls, channel) => calls.filter((c) => c.method === "POST" && c.p
 const lastOriginal = (calls) => calls.filter((c) => c.method === "PATCH" && c.path.endsWith("/@original")).at(-1)?.body;
 
 async function cron(e, ms) {
+  clock = ms;
   await worker.scheduled({ scheduledTime: ms }, e);
 }
 
 // Tue 6 Oct 2026 10:00 UTC. The tourney starts Saturday 10 Oct, 19:00 UTC (21:00 CEST).
 const NOW = Date.UTC(2026, 9, 6, 10, 0);
 const START = Date.UTC(2026, 9, 10, 19, 0);
+/** The test's clock: the last cron run's time. */
+let clock = NOW;
 
 /** A tourney an admin made on the site. */
 function siteTourney(siteTourneys, fields = {}) {

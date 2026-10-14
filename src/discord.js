@@ -42,10 +42,9 @@ export async function verifyRequest(request, publicKey) {
 }
 
 export class DiscordError extends Error {
-  constructor(status, message, code) {
+  constructor(status, message) {
     super(`Discord ${status}: ${message}`);
     this.status = status;
-    this.code = code;
   }
 }
 
@@ -80,7 +79,7 @@ export class Discord {
       }
       if (res.status === 204) return null;
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new DiscordError(res.status, data?.message ?? res.statusText, data?.code);
+      if (!res.ok) throw new DiscordError(res.status, data?.message ?? res.statusText);
       return data;
     }
   }

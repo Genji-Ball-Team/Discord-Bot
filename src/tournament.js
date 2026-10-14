@@ -406,7 +406,7 @@ export async function signupButton(env, interaction, action, id, nowMs = Date.no
     )
       .bind(id, userId, displayName(interaction), nowMs, confirming ? 1 : 0)
       .run();
-    if (!done.meta?.changes && !done.changes) {
+    if (!done.meta.changes) {
       const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
       return { reply: alreadyReply(t, name, row ?? {}) };
     }
@@ -415,7 +415,7 @@ export async function signupButton(env, interaction, action, id, nowMs = Date.no
 
   // unreg
   const gone = await env.DB.prepare("DELETE FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
-  if (!gone.meta?.changes && !gone.changes) return { reply: `You weren't registered for ${name}.` };
+  if (!gone.meta.changes) return { reply: `You weren't registered for ${name}.` };
   return { reply: `You're no longer registered for ${name}.`, changed: true };
 }
 
@@ -462,7 +462,7 @@ export async function siteSignup(env, site, interaction, action, id, ign = "", n
     if (answer.status === 409) return closedReply;
     const gone = await env.DB.prepare("DELETE FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
     await setSiteCount(env, t, answer.signups?.count);
-    if (!answer.removed && !gone.meta?.changes && !gone.changes) return { reply: `You weren't registered for ${name}.`, changed: true };
+    if (!answer.removed && !gone.meta.changes) return { reply: `You weren't registered for ${name}.`, changed: true };
     return { reply: `You're no longer registered for ${name}.`, changed: true };
   }
 
@@ -491,7 +491,7 @@ export async function siteSignup(env, site, interaction, action, id, ign = "", n
   )
     .bind(id, userId, result.signup?.name ?? ign, nowMs, confirming ? 1 : 0)
     .run();
-  if (!done.meta?.changes && !done.changes) {
+  if (!done.meta.changes) {
     const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
     return { reply: alreadyReply(t, name, row ?? {}), changed: true };
   }
