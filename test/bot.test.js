@@ -6,7 +6,7 @@ import worker, { optionsOf } from "../src/index.js";
 import { parseButton, renderLeaderboard } from "../src/leaderboard.js";
 import { Site } from "../src/site.js";
 import { Discord } from "../src/discord.js";
-import { listMessages, runTournaments } from "../src/tournament.js";
+import { listMessages, runTournaments, signup } from "../src/tournament.js";
 import { resultsPost } from "../src/results.js";
 import { minutes } from "../src/time.js";
 import { ENV, STAFF, fakeCtx, fakeD1, installFetch } from "./helpers.js";
@@ -359,6 +359,28 @@ test("deleted on the site just before the start: cancelled, no list", async () =
   await cron(e, START);
   assert.equal(posts(calls, "signups").length, 1);
   assert.match(calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/channels/signups/")).at(-1).body.embeds[0].title, /Cancelled/);
+});
+
+test("a post refresh after a button shows the tourney as it is by then", async () => {
+  const e = env();
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  const edits = () => calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/channels/signups/"));
+
+  // Moved by the cron before the refresh runs: the post shows the new time.
+  const first = await signup(e, new Site(e), new Discord(e), press(`gr:reg:${t.id}`, player("p1")), "reg", t.id, NOW);
+  e.DB.raw.prepare("UPDATE tournaments SET starts_at = starts_at + 3600 WHERE id = ?").run(t.id);
+  await first.refresh();
+  assert.match(edits().at(-1).body.embeds[0].description, new RegExp(`<t:${START / 1000 + 3600}:F>`));
+
+  // Cancelled before the refresh runs: the crossed-out post stays, no buttons come back.
+  const second = await signup(e, new Site(e), new Discord(e), press(`gr:reg:${t.id}`, player("p2")), "reg", t.id, NOW);
+  e.DB.raw.prepare("UPDATE tournaments SET phase = 'cancelled' WHERE id = ?").run(t.id);
+  const before = edits().length;
+  await second.refresh();
+  assert.equal(edits().length, before);
 });
 
 // ---------- one sign-up list with the site (SITE_TOKEN) ----------
