@@ -10,7 +10,8 @@ export function fakeD1() {
     bind: (...a) => stmt(sql, a),
     first: async () => db.prepare(sql).get(...args) ?? null,
     all: async () => ({ results: db.prepare(sql).all(...args) }),
-    run: async () => db.prepare(sql).run(...args),
+    // D1 answers a write with its row count under `meta`.
+    run: async () => ({ meta: db.prepare(sql).run(...args) }),
   });
   return { prepare: (sql) => stmt(sql), batch: async (list) => Promise.all(list.map((s) => s.run())), raw: db };
 }
@@ -21,10 +22,6 @@ export const ENV = {
   STAFF_ROLE_ID: "staff-role",
   SITE_URL: "https://genjiball.us",
   TOURNEY_CHANNEL_ID: "signups",
-  EU_DEFAULT_TIME: "21:00",
-  EU_TIMEZONE: "Europe/Berlin",
-  NA_DEFAULT_TIME: "21:00",
-  NA_TIMEZONE: "America/New_York",
   CONFIRM_MINUTES: "5",
   RESULTS_CHANNEL_ID: "results",
 };
@@ -61,9 +58,7 @@ export function installFetch({
   feed = { entries: [], details: new Map() },
 } = {}) {
   const calls = [];
-  let nextTourney = 41;
   let nextId = 5000;
-  const dmChannels = new Map();
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url ?? String(input));
     const method = init.method ?? "GET";
@@ -104,22 +99,6 @@ export function installFetch({
           return { discordUserId, status, signup: row ? { name: row.name, signedUpAt: row.signedUpAt } : null };
         });
         return reply({ results, ...state() }, 201);
-      }
-      if (url.pathname.startsWith("/api/admin/")) {
-        if (init.headers?.Authorization !== "Bearer admin-token") return reply({ error: "unauthorized", message: "No admin token" }, 401);
-        if (siteDown) return reply({ error: "internal", message: "Internal error" }, 500);
-        if (method === "POST" && url.pathname === "/api/admin/tourneys") {
-          const tourney = { id: nextTourney++, status: "scheduled", lobbies: [], ...body };
-          siteTourneys.set(tourney.id, tourney);
-          return reply({ tourney }, 201);
-        }
-        const t = /^\/api\/admin\/tourneys\/(\d+)$/.exec(url.pathname);
-        if (method === "POST" && t) {
-          const tourney = siteTourneys.get(Number(t[1]));
-          if (!tourney) return reply({ error: "not_found" }, 404);
-          Object.assign(tourney, body);
-          return reply({ tourney });
-        }
       }
       // The match feed: `feed.entries` are { seq, match } in change order; `feed.details` the full matches.
       if (url.pathname === "/api/matches") {
@@ -205,7 +184,6 @@ export function installFetch({
       if (method === "PATCH" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply({ id: "x", ...body });
       if (method === "DELETE" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply(null, 204);
       if (method === "POST" && path === "/users/@me/channels") {
-        dmChannels.set(body.recipient_id, `dm-${body.recipient_id}`);
         return reply({ id: `dm-${body.recipient_id}` });
       }
       return reply({ message: "Unknown route " + method + " " + path }, 404);
@@ -215,10 +193,10 @@ export function installFetch({
   return calls;
 }
 
-/** A ctx whose waitUntil promises the test can await. */
 /** A server member with the staff role. */
 export const STAFF = { user: { id: "fealthy-id" }, roles: ["staff-role"], permissions: "0" };
 
+/** A ctx whose waitUntil promises the test can await. */
 export function fakeCtx() {
   const pending = [];
   return { waitUntil: (p) => pending.push(p), done: () => Promise.all(pending) };
