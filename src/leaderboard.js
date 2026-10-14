@@ -1,5 +1,6 @@
 // The leaderboard message: 15 players a page, up to page 5 (top 75), EU and NA tabs.
 
+import { NO_PINGS, RED } from "./discord.js";
 import { REGIONS, escapeMarkdown, regionOf } from "./site.js";
 
 export const PAGE_SIZE = 15;
@@ -48,7 +49,7 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
     title: `${info.label} Leaderboard — Top ${to}`,
     url: site.leaderboardUrl(region),
     description,
-    color: 0xed4245,
+    color: RED,
     footer: {
       text: live ? `Live · updates every ${refreshMinutes} min · the buttons show you your own copy · Updated` : `Page ${page}/${MAX_PAGES} · Updated`,
     },
@@ -72,7 +73,7 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
       ],
     },
   ];
-  return { region, page, message: { embeds: [embed], components, allowed_mentions: { parse: [] } } };
+  return { region, page, message: { embeds: [embed], components, allowed_mentions: NO_PINGS } };
 }
 
 function button(label, customId, style, disabled) {

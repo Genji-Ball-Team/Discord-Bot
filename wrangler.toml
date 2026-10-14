@@ -37,7 +37,7 @@ RESULTS_CHANNEL_ID = "1548176572110868551"
 # How often the bot looks for new, renamed, moved or cancelled tourneys on the site, in minutes (1–60).
 TOURNEY_REFRESH_MINUTES = "5"
 
-# Minutes before the start that the Confirm DMs go out. Unconfirmed players aren't on the list.
+# Minutes before the start that the Confirm DMs go out (1–60). Unconfirmed players aren't on the list.
 CONFIRM_MINUTES = "5"
 
 # How often the live leaderboard (/gr setup leaderboard) updates, in minutes (1–60).
