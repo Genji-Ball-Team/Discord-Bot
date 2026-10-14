@@ -8,9 +8,19 @@
 import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { postResults } from "./results.js";
-import { Site } from "./site.js";
+import { Site, signsUp } from "./site.js";
 import { autocompletePlayers, renderStats } from "./stats.js";
-import { confirmButton, parseTourneyButton, refreshPostById, runTournaments, signupButton, syncTourneys, tourneyMinutes } from "./tournament.js";
+import {
+  confirmButton,
+  formName,
+  parseTourneyButton,
+  refreshPostById,
+  runTournaments,
+  signupButton,
+  siteSignup,
+  syncTourneys,
+  tourneyMinutes,
+} from "./tournament.js";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 const privateReply = (content) => json({ type: ResponseType.MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: NO_PINGS } });
@@ -134,8 +144,12 @@ async function handleButton(env, ctx, interaction) {
     const message = await confirmButton(env, interaction, tourney.id);
     return json({ type: ResponseType.UPDATE_MESSAGE, data: message });
   }
+  if (tourney && signsUp(env) && (tourney.action === "unreg" || tourney.action === "who")) {
+    return siteSignupReply(env, ctx, interaction, tourney);
+  }
   if (tourney) {
-    const { reply, changed } = await signupButton(env, interaction, tourney.action, tourney.id);
+    const { reply, changed, form } = await signupButton(env, interaction, tourney.action, tourney.id);
+    if (form) return json({ type: ResponseType.MODAL, data: form });
     if (changed) ctx.waitUntil(refreshPostById(env, new Discord(env), tourney.id).catch((e) => console.error("refresh post", e)));
     return privateReply(reply);
   }
@@ -158,6 +172,29 @@ async function handleButton(env, ctx, interaction) {
     })(),
   );
   return json(live ? { type: ResponseType.DEFERRED_MESSAGE, data: { flags: EPHEMERAL } } : { type: ResponseType.DEFERRED_UPDATE });
+}
+
+/** A sign-up that calls the site (one list with it): answered privately once the site has. */
+function siteSignupReply(env, ctx, interaction, tourney, ign) {
+  const discord = new Discord(env);
+  return deferred(
+    ctx,
+    discord,
+    interaction,
+    async () => {
+      const { reply, changed } = await siteSignup(env, new Site(env), interaction, tourney.action, tourney.id, ign);
+      if (changed) await refreshPostById(env, discord, tourney.id).catch((e) => console.error("refresh post", e));
+      return reply;
+    },
+    { ephemeral: true },
+  );
+}
+
+/** Register's in-game name form, sent. */
+function handleForm(env, ctx, interaction) {
+  const tourney = parseTourneyButton(interaction.data?.custom_id);
+  if (tourney?.action !== "ign") return privateReply("I don't know that form.");
+  return siteSignupReply(env, ctx, interaction, tourney, formName(interaction));
 }
 
 async function handleAutocomplete(env, interaction) {
@@ -203,6 +240,8 @@ export default {
         return handleButton(env, ctx, interaction);
       case InteractionType.AUTOCOMPLETE:
         return handleAutocomplete(env, interaction);
+      case InteractionType.MODAL_SUBMIT:
+        return handleForm(env, ctx, interaction);
       default:
         return new Response("Unknown interaction", { status: 400 });
     }

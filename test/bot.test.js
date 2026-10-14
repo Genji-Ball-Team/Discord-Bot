@@ -258,6 +258,121 @@ test("a long list is split under 2,000 characters", () => {
   assert.deepEqual(listMessages({ name: "X" }, []), ["📋 **X** · **0 confirmed players**\nNobody confirmed, so this tournament has no players."]);
 });
 
+// ---------- one sign-up list with the site (SITE_TOKEN) ----------
+
+const form = (id, value, member) => ({
+  type: 5,
+  member,
+  data: { custom_id: `gr:ign:${id}`, components: [{ type: 1, components: [{ type: 4, custom_id: "ign", value }] }] },
+});
+const postEdits = (calls) => calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/channels/signups/messages/"));
+const shownCount = (calls) => /\*\*(\d+)\*\*/.exec(JSON.stringify(postEdits(calls).at(-1).body.embeds[0].fields))?.[1];
+
+test("with SITE_TOKEN, Discord and the site share one sign-up list", async () => {
+  const e = env({ SITE_TOKEN: "site-token" });
+  const siteTourneys = new Map();
+  const siteSignups = new Map();
+  const calls = installFetch({ siteTourneys, siteSignups });
+  const { id } = siteTourney(siteTourneys);
+  // Names typed on the tourney's page.
+  siteSignups.set(id, [
+    { name: "Ada", discordUserId: null, signedUpAt: "2026-10-06T09:00:00Z" },
+    { name: "Zed", discordUserId: null, signedUpAt: "2026-10-06T09:01:00Z" },
+  ]);
+
+  // The post counts the site's sign-ups.
+  await cron(e, NOW);
+  assert.match(JSON.stringify(posts(calls, "signups")[0].body.embeds[0].fields), /\*\*2\*\*/);
+
+  // Register asks for the in-game name, the server name filled in.
+  const asked = await send(e, press(`gr:reg:${id}`, player("p1")));
+  assert.equal(asked.type, 9);
+  assert.equal(asked.data.custom_id, `gr:ign:${id}`);
+  assert.equal(asked.data.components[0].components[0].value, "Player p1");
+  assert.equal(calls.filter((c) => c.site && c.method !== "GET").length, 0);
+
+  // The form signs them up on the site, with their Discord user.
+  assert.equal((await send(e, form(id, "  Kenzo ", player("p1")))).type, 5);
+  assert.match(lastOriginal(calls).content, /You're registered for \*\*EU FFA Tournament\*\*/);
+  const write = calls.filter((c) => c.site && c.method === "POST").at(-1);
+  assert.equal(write.auth, "Bearer site-token");
+  assert.deepEqual(write.body, { signups: [{ discordUserId: "p1", name: "Kenzo" }] });
+  assert.equal(shownCount(calls), "3");
+
+  // A name typed on the page is the same player: p2 takes Ada's sign-up.
+  await send(e, form(id, "ada", player("p2")));
+  assert.match(lastOriginal(calls).content, /registered for \*\*EU FFA Tournament\*\* as \*\*Ada\*\*/);
+  assert.equal(shownCount(calls), "3");
+  // Another Discord user's name is theirs.
+  await send(e, form(id, "KENZO", player("p3")));
+  assert.match(lastOriginal(calls).content, /Someone else on Discord signed up .* as \*\*KENZO\*\*/);
+  assert.equal(await e.DB.prepare("SELECT COUNT(*) AS n FROM entrants WHERE user_id = 'p3'").first().then((r) => r.n), 0);
+  // Registered already: no form.
+  assert.match((await send(e, press(`gr:reg:${id}`, player("p1")))).data.content, /already registered/);
+
+  // Who's signed up: the site's list.
+  await send(e, press(`gr:who:${id}`, player("p9")));
+  assert.equal(lastOriginal(calls).content, "**3 signed up**\n1. Ada\n2. Zed · on the site\n3. Kenzo");
+
+  // A name signed up on the page meanwhile: the post follows on the sync.
+  siteSignups.get(id).push({ name: "Late", discordUserId: null, signedUpAt: "2026-10-06T11:00:00Z" });
+  await cron(e, NOW + 5 * 60_000);
+  assert.equal(shownCount(calls), "4");
+
+  // Unregister takes them off the site too.
+  await send(e, form(id, "Tidal", player("p4")));
+  await send(e, press(`gr:unreg:${id}`, player("p4")));
+  assert.match(lastOriginal(calls).content, /no longer registered/);
+  assert.ok(!siteSignups.get(id).some((s) => s.name === "Tidal"));
+  assert.equal(shownCount(calls), "4");
+
+  // An admin removes Ada (p2) on the site: no DM for them.
+  siteSignups.get(id)[0].removed = true;
+  await cron(e, START - 5 * 60_000);
+  const dms = calls.filter((c) => c.method === "POST" && c.path?.startsWith("/channels/dm-"));
+  assert.deepEqual(dms.map((c) => c.path), ["/channels/dm-p1/messages"]);
+
+  // The list: the confirmed Discord players, and apart, who signed up only on the site.
+  await send(e, dmPress(`gr:conf:${id}`, "p1"));
+  await cron(e, START);
+  assert.equal(
+    posts(calls, "signups").at(-1).body.content,
+    "📋 **EU FFA Tournament** · **1 confirmed player**\n1. <@p1>\n\nAlso signed up on the site, not on Discord (they couldn't confirm):\n- Zed\n- Late\n\nHosts: split the lobbies from this list.",
+  );
+});
+
+test("registrations from before SITE_TOKEN are sent to the site on the sync", async () => {
+  const siteTourneys = new Map();
+  const siteSignups = new Map();
+  const calls = installFetch({ siteTourneys, siteSignups });
+  const { id } = siteTourney(siteTourneys);
+  siteSignups.set(id, [{ name: "Fealthy", discordUserId: null, signedUpAt: "2026-10-06T09:00:00Z" }]);
+  const e = env();
+  await cron(e, NOW);
+  await send(e, press(`gr:reg:${id}`, player("p1", "Fealthy")));
+  await send(e, press(`gr:reg:${id}`, player("p2", "Toasty (Toasty#22134)")));
+  assert.equal(siteSignups.get(id).length, 1);
+
+  // The token is set: the next sync sends both, under their server names. Fealthy is the same player.
+  const synced = { ...e, SITE_TOKEN: "site-token" };
+  await cron(synced, NOW + 5 * 60_000);
+  assert.deepEqual(
+    siteSignups.get(id).map((s) => [s.name, s.discordUserId]),
+    [
+      ["Fealthy", "p1"],
+      ["Toasty (Toasty#22134)", "p2"],
+    ],
+  );
+  const { results } = await e.DB.prepare("SELECT user_id, on_site FROM entrants ORDER BY user_id").all();
+  assert.deepEqual(results.map((r) => [r.user_id, r.on_site]), [["p1", 1], ["p2", 1]]);
+  assert.equal(shownCount(calls), "2");
+  // Nothing is sent twice.
+  const writes = () => calls.filter((c) => c.site && c.method === "POST").length;
+  const before = writes();
+  await cron(synced, NOW + 10 * 60_000);
+  assert.equal(writes(), before);
+});
+
 // ---------- tournament results ----------
 
 const RESULT_PLAYERS = [

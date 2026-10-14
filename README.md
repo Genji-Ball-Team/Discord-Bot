@@ -16,16 +16,27 @@ Everything is under **`/gr`**.
 
 ## How a tournament runs
 
-Admins make tourneys on **genjiball.us** (the admin page), with their lobbies and hosts, as before. The bot only reads the site and never changes it.
+Admins make tourneys on **genjiball.us** (the admin page), with their lobbies and hosts, as before.
 
-1. **The post.** Within `TOURNEY_REFRESH_MINUTES` (5) of a tourney being made on the site, the bot posts its sign-up in `TOURNEY_CHANNEL_ID`: name, start time in each reader's own time zone, region and the sign-up count, with **Register**, **Unregister** and **👥 Who's signed up**. It never pings anyone. Each button answers privately.
+1. **The post.** Within `TOURNEY_REFRESH_MINUTES` (5) of a tourney being made on the site, the bot posts its sign-up in `TOURNEY_CHANNEL_ID`: name, start time in each reader's own time zone, region and the sign-up count, with **Register**, **Unregister** and **👥 Who's signed up**. It never pings anyone. Each button answers privately. **Register** asks for your in-game name (your server name filled in) and signs you up on the site too: see [One list with the site](#one-list-with-the-site).
 2. **5 minutes before** (`CONFIRM_MINUTES`), everyone registered gets a DM: "⏰ Tournament starting in 5 minutes" with a **Confirm** button. Anyone who doesn't press it isn't playing. Register stays open, and registering now confirms at once. Players with DMs closed never get the button, so they're out.
 3. **At the start**, the sign-up post is deleted and the list of confirmed players is posted as @mentions that notify nobody, ending "Hosts: split the lobbies from this list."
 4. When an admin marks the tourney **done** on the site (with lobby standings), the bot posts the standings under the list.
 
 Changes on the site follow within 5 minutes: a new name or start time updates the post (moved later during the 5 confirm minutes: back to sign-ups, and the DMs go out again before the new start), and a cancelled or deleted tourney's post is crossed out. Right before posting the list, the bot checks the site once more, so a last-minute move or cancel is caught too.
 
-The site's own name sign-up on the tourney page isn't used by the bot: players sign up in Discord.
+### One list with the site
+
+With the `SITE_TOKEN` secret set, Discord and the tourney's page on genjiball.us share one sign-up list:
+
+- **Register** signs you up on the site with the in-game name you type. A name someone already typed on the page with no Discord account is you: you take that sign-up. A name another Discord user has is refused.
+- **Unregister** takes you off the site's list too.
+- The post's count and **Who's signed up** are the site's: names typed on the page are counted and listed ("on the site"). A name typed on the page shows up on the post within 5 minutes.
+- An admin who removes you on the site's admin page removes you here too: no Confirm DM, not on the list.
+- Players who signed up only on the page can't get the Confirm DM. The list at the start names them apart, for the hosts.
+- Registrations from before `SITE_TOKEN` was set are sent within 5 minutes, under the server name they registered with. One whose name another Discord user already has stays registered in Discord only.
+
+Without `SITE_TOKEN` the bot keeps its own list, as before, and doesn't use the page's sign-ups.
 
 ## Tournament results
 
@@ -48,7 +59,7 @@ First time only, or after adding a table to `schema.sql`: `npm run db:setup`, **
 
 Deploy only to the Genji Ball Cloudflare account, the one genjiball.us is on: check `npx wrangler whoami` first, never a personal account.
 
-The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secret put DISCORD_TOKEN`.
+The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secret put DISCORD_TOKEN`. So is the site's: `npx wrangler secret put SITE_TOKEN`, the same value as genjiball.us's `BOT_TOKEN` secret (in genjiball-ranked: `npx wrangler secret put BOT_TOKEN`).
 
 ## Setting it up from scratch
 
@@ -61,6 +72,6 @@ The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secre
 ## Good to know
 
 - **Limits:** the free Cloudflare plan allows about 45 Discord requests a minute, so the bot sends about 20 Confirm DMs a minute: 100 within the 5 minutes.
-- **Where everything comes from:** genjiball.us's public API. The bot never changes the site.
+- **Where everything comes from:** genjiball.us's public API. The only thing the bot changes there is the tourney sign-ups (with `SITE_TOKEN`).
 - `npm test` runs the tests (Node 22.5 or newer).
 - Working on the code? Read [AGENTS.md](AGENTS.md), and open a PR with the template: CI runs `npm test` on it.

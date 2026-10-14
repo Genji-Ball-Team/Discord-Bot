@@ -19,8 +19,8 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 - **Interactions.** Discord sends slash commands, button presses and autocomplete to `POST /interactions`, signed with Ed25519 (`verifyRequest` in `src/discord.js`). Discord wants an answer within 3 seconds: anything that calls the site or Discord answers "deferred" at once and finishes in `ctx.waitUntil`, editing the reply (`src/index.js`).
 - **Commands.** Everything is under one `/gr` command (`scripts/commands.js`), registered in the Genji Ball server (`DISCORD_GUILD_ID`).
 - **Cron.** Every minute: the tourneys' Confirm DMs and lists (`src/tournament.js`); every `TOURNEY_REFRESH_MINUTES` the site's new or changed tourneys; every 5 minutes the tournament match results (`src/results.js`); every `LEADERBOARD_REFRESH_MINUTES` the live leaderboards.
-- **Tourneys** are made on the site (lobbies, hosts, standings). The bot posts each one with Register / Unregister buttons, DMs the registered players a Confirm button `CONFIRM_MINUTES` before the start, then replaces the post with the list of confirmed players. Players sign up in Discord (`entrants`), not with the site's name sign-up.
-- **The site.** Every number comes from genjiball.us's public API (`src/site.js`), documented in genjiball-ranked's [`docs/api.md`](https://github.com/Genji-Ball-Team/genjiball-ranked/blob/main/docs/api.md) ("Site"). The bot only reads it and has no token: it never changes the site.
+- **Tourneys** are made on the site (lobbies, hosts, standings). The bot posts each one with Register / Unregister buttons, DMs the registered players a Confirm button `CONFIRM_MINUTES` before the start, then replaces the post with the list of confirmed players. With `SITE_TOKEN`, the sign-ups are one list with the site's (`siteSignup`, README "One list with the site"): Register asks for the in-game name and signs the player up there too, and `entrants` keeps what only Discord has (the user, Confirm, the DM). Without it, the bot keeps its own list.
+- **The site.** Every number comes from genjiball.us's public API (`src/site.js`), documented in genjiball-ranked's [`docs/api.md`](https://github.com/Genji-Ball-Team/genjiball-ranked/blob/main/docs/api.md) ("Site"). The only writes are the tourney sign-ups, through the bot's own routes ("Discord bot sign-ups"), behind `SITE_TOKEN`.
 
 ## Limits
 
@@ -37,7 +37,7 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 
 ## Config and data
 
-- Settings are `[vars]` in `wrangler.toml`, read through a small helper with a default. The bot token is a `wrangler secret` (`DISCORD_TOKEN`), never in the repo.
+- Settings are `[vars]` in `wrangler.toml`, read through a small helper with a default. The bot token (`DISCORD_TOKEN`) and the site's (`SITE_TOKEN`) are `wrangler secret`s, never in the repo.
 - The schema is `schema.sql`, run on the live database with `npm run db:setup`. It must stay safe to run again: `CREATE TABLE IF NOT EXISTS`. A change to an existing table is a new `ALTER TABLE` statement run by hand on the live database; say so in the PR.
 
 ## Deploying

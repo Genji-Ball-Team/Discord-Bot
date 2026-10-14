@@ -20,7 +20,7 @@ DISCORD_PUBLIC_KEY = "8d2c76d55758fea1e5f5486946b95ca31783fda2c6348b5d6e3be643c1
 # The Genji Ball server: npm run register puts the /gr commands here.
 DISCORD_GUILD_ID = "1110543205482627102"
 
-# The website the bot reads. It never changes it.
+# The website the bot reads. With the SITE_TOKEN secret it also signs players up for its tourneys.
 SITE_URL = "https://genjiball.us"
 
 # Staff: members with this role (and server admins) can use everything but /gr stats.
@@ -43,4 +43,5 @@ CONFIRM_MINUTES = "5"
 # How often the live leaderboard (/gr setup leaderboard) updates, in minutes (1–60).
 LEADERBOARD_REFRESH_MINUTES = "5"
 
-# The bot token is a secret: `npx wrangler secret put DISCORD_TOKEN`, never here.
+# The bot token is a secret: `npx wrangler secret put DISCORD_TOKEN`, never here. So is SITE_TOKEN
+# (`npx wrangler secret put SITE_TOKEN`): genjiball.us's BOT_TOKEN, for the tourney sign-ups.
