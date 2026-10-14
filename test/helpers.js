@@ -47,10 +47,13 @@ function signupsOf(siteSignups, id) {
 
 /**
  * Installs a fake fetch. Discord and site calls are recorded in `calls`; `closedDms` users answer
- * 403 to a DM; `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id.
+ * 403 to a DM; Discord answers 500 to the calls `discordDown({ method, path })` picks (429 when it
+ * returns 429);
+ * `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id.
  */
 export function installFetch({
   closedDms = new Set(),
+  discordDown = () => false,
   boardTotal = 80,
   siteTourneys = new Map(),
   siteSignups = new Map(),
@@ -170,6 +173,9 @@ export function installFetch({
     if (url.hostname === "discord.com") {
       const path = url.pathname.replace("/api/v10", "");
       calls.push({ method, path, body, query: url.search });
+      const down = discordDown({ method, path });
+      if (down === 429) return reply({ message: "You are being rate limited.", retry_after: 0 }, 429);
+      if (down) return reply({ message: "Internal Server Error" }, 500);
       let m;
       if (method === "PATCH" && /^\/webhooks\/app1\/[^/]+\/messages\/@original$/.test(path)) {
         return reply({ id: "board-msg", channel_id: "chan1", ...body });

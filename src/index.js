@@ -142,7 +142,8 @@ async function handleCommand(env, ctx, interaction) {
 async function handleButton(env, ctx, interaction) {
   const tourney = parseTourneyButton(interaction.data.custom_id);
   if (tourney?.action === "conf") {
-    const message = await confirmButton(env, interaction, tourney.id);
+    const { message, changed } = await confirmButton(env, interaction, tourney.id);
+    if (changed) ctx.waitUntil(refreshPostById(env, new Discord(env), tourney.id).catch((e) => console.error("refresh post", e)));
     return json({ type: ResponseType.UPDATE_MESSAGE, data: message });
   }
   if (tourney && signsUp(env) && (tourney.action === "unreg" || tourney.action === "who")) {
@@ -178,17 +179,7 @@ async function handleButton(env, ctx, interaction) {
 /** A sign-up that calls the site (one list with it): answered privately once the site has. */
 function siteSignupReply(env, ctx, interaction, tourney, ign) {
   const discord = new Discord(env);
-  return deferred(
-    ctx,
-    discord,
-    interaction,
-    async () => {
-      const { reply, changed } = await siteSignup(env, new Site(env), interaction, tourney.action, tourney.id, ign);
-      if (changed) await refreshPostById(env, discord, tourney.id).catch((e) => console.error("refresh post", e));
-      return reply;
-    },
-    { ephemeral: true },
-  );
+  return deferred(ctx, discord, interaction, () => siteSignup(env, new Site(env), discord, interaction, tourney.action, tourney.id, ign), { ephemeral: true });
 }
 
 /** Register's in-game name form, sent. */
