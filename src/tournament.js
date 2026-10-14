@@ -344,7 +344,7 @@ function nameForm(t, interaction) {
 }
 
 /** The in-game name typed in the form. */
-export function formName(interaction) {
+function formName(interaction) {
   const field = (interaction.data?.components ?? []).flatMap((row) => row.components ?? []).find((c) => c.custom_id === "ign");
   return siteName(field?.value);
 }
@@ -365,123 +365,76 @@ function registeredReply(env, t, name, nowMs, as = "") {
   );
 }
 
+/** Whether the button's answer needs the site, so it's sent once the site has answered. */
+export const callsSite = (env, action) => signsUp(env) && action !== "reg";
+
+/** A post refresh to run after answering. A failure is logged: the answer stands. */
+const refreshLater = (env, discord, t) => () => refreshPost(env, discord, t).catch((e) => console.error("refresh post", e));
+
 /**
- * Register, Unregister and Who's signed up on the post. Returns `{ reply, changed }`: the private
- * reply, and whether the post's counts need refreshing; or `{ form }`, Register's in-game name form.
- * When the sign-ups are one list with the site, only Register comes here: the rest is `siteSignup`.
+ * Register, Unregister and Who's signed up on the post, and Register's in-game name form (`ign`).
+ * Returns `{ reply }`, the private reply, or `{ form }`, the form to open; with `refresh` when the
+ * post's counts changed. With SITE_TOKEN each is a call to the site too (see `callsSite`).
  */
-export async function signupButton(env, interaction, action, id, nowMs = Date.now()) {
+export async function signup(env, site, discord, interaction, action, id, nowMs = Date.now()) {
   const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
   if (!t) return { reply: "I don't know that tournament." };
   const name = `**${escapeMarkdown(t.name)}**`;
   if (t.phase === "cancelled") return { reply: `${name} was cancelled.` };
-  const closed = t.phase !== "open" && t.phase !== "confirming";
+  const open = t.phase === "open" || t.phase === "confirming";
   const userId = userOf(interaction)?.id;
-
-  if (action === "who") {
-    const { results } = await env.DB.prepare("SELECT name, confirmed FROM entrants WHERE tournament_id = ? ORDER BY registered_at, user_id").bind(id).all();
-    if (!results.length) return { reply: `Nobody has signed up for ${name} yet.` };
-    const confirming = t.phase === "confirming";
-    const confirmedCount = results.filter((r) => r.confirmed).length;
-    let text = confirming ? `**${results.length} signed up · ${confirmedCount} confirmed**` : `**${results.length} signed up**`;
-    for (const [i, r] of results.entries()) {
-      const line = `\n${i + 1}. ${escapeMarkdown(r.name)}${confirming && r.confirmed ? " ✅" : ""}`;
-      if (text.length + line.length > MESSAGE_MAX - 20) {
-        text += `\n…and ${results.length - i} more`;
-        break;
-      }
-      text += line;
-    }
-    return { reply: text };
-  }
-
-  if (closed) return { reply: `Sign-ups for ${name} are closed.` };
-
-  if (action === "reg") {
-    if (signsUp(env)) {
-      // Not on the site's list yet (or it refused their name): the form signs them up there.
-      const row = await env.DB.prepare("SELECT confirmed, on_site FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
-      return row?.on_site === 1 ? { reply: alreadyReply(t, name, row) } : { form: nameForm(t, interaction) };
-    }
-    const confirming = t.phase === "confirming" && nowMs < t.starts_at * 1000;
-    const done = await env.DB.prepare(
-      `INSERT OR IGNORE INTO entrants (tournament_id, user_id, name, registered_at, confirmed, dm_status) VALUES (?, ?, ?, ?, ?, 'none')`,
-    )
-      .bind(id, userId, displayName(interaction), nowMs, confirming ? 1 : 0)
-      .run();
-    if (!done.meta.changes) {
-      const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
-      return { reply: alreadyReply(t, name, row ?? {}) };
-    }
-    return { reply: registeredReply(env, t, name, nowMs), changed: true };
-  }
-
-  // unreg
-  const gone = await env.DB.prepare("DELETE FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
-  if (!gone.meta.changes) return { reply: `You weren't registered for ${name}.` };
-  return { reply: `You're no longer registered for ${name}.`, changed: true };
+  let answer;
+  if (action === "who") answer = await who(env, site, t, name);
+  else if (!open) answer = { reply: `Sign-ups for ${name} are closed.` };
+  else if (action === "reg") answer = await register(env, interaction, t, name, userId, nowMs);
+  else if (action === "ign") answer = await siteRegister(env, site, t, name, userId, formName(interaction), nowMs);
+  else answer = await unregister(env, site, t, name, userId);
+  const { changed, ...rest } = answer;
+  return changed && open ? { ...rest, refresh: refreshLater(env, discord, t) } : rest;
 }
 
-/**
- * One list with the site: the form's sign-up (`ign`, with the in-game name), Unregister and Who's
- * signed up, each a call to the site. Refreshes the post when its counts changed (with the site's
- * count, saved once the post shows it); returns the private reply.
- */
-export async function siteSignup(env, site, discord, interaction, action, id, ign = "", nowMs = Date.now()) {
-  const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
-  if (!t) return "I don't know that tournament.";
-  const { reply, changed } = await siteAnswer(env, site, t, userOf(interaction)?.id, action, ign, nowMs);
-  if (changed && (t.phase === "open" || t.phase === "confirming")) await refreshPost(env, discord, t).catch((e) => console.error("refresh post", e));
-  return reply;
+/** Who's signed up: the site's list when it's one list with it, else the bot's own. */
+async function who(env, site, t, name) {
+  const { results } = await env.DB.prepare("SELECT user_id, name, confirmed FROM entrants WHERE tournament_id = ? ORDER BY registered_at, user_id")
+    .bind(t.id)
+    .all();
+  if (!signsUp(env)) return { reply: whoReply(t, name, results) };
+  const answer = await site.signups(t.id);
+  if (!answer.entries) return { reply: `I can't find ${name} on the site.` };
+  const confirmed = new Set(results.filter((r) => r.confirmed).map((r) => r.user_id));
+  const list = answer.entries.map((e) => ({ name: e.name, confirmed: confirmed.has(e.discordUserId), siteOnly: !e.discordUserId }));
+  return { reply: whoReply(t, name, list), changed: setSiteCount(t, answer.signups?.count) };
 }
 
-/** `siteSignup`'s work: `{ reply, changed }`, as `signupButton` returns. */
-async function siteAnswer(env, site, t, userId, action, ign, nowMs) {
-  const id = t.id;
-  const name = `**${escapeMarkdown(t.name)}**`;
-  if (t.phase === "cancelled") return { reply: `${name} was cancelled.` };
-  const closed = t.phase !== "open" && t.phase !== "confirming";
-  const closedReply = { reply: `Sign-ups for ${name} are closed.` };
-
-  if (action === "who") {
-    const answer = await site.signups(id);
-    if (!answer.entries) return { reply: `I can't find ${name} on the site.` };
-    const changed = setSiteCount(t, answer.signups?.count);
-    const entries = answer.entries;
-    if (!entries.length) return { reply: `Nobody has signed up for ${name} yet.`, changed };
-    const confirming = t.phase === "confirming";
-    const { results } = await env.DB.prepare("SELECT user_id FROM entrants WHERE tournament_id = ? AND confirmed = 1").bind(id).all();
-    const confirmed = new Set(results.map((r) => r.user_id));
-    let text = `**${entries.length} signed up**`;
-    if (confirming) text += ` · ${entries.filter((e) => confirmed.has(e.discordUserId)).length} confirmed`;
-    for (const [i, e] of entries.entries()) {
-      const mark = !e.discordUserId ? " · on the site" : confirming && confirmed.has(e.discordUserId) ? " ✅" : "";
-      const line = `\n${i + 1}. ${escapeMarkdown(e.name)}${mark}`;
-      if (text.length + line.length > MESSAGE_MAX - 20) {
-        text += `\n…and ${entries.length - i} more`;
-        break;
-      }
-      text += line;
+/** `list`: `{ name, confirmed, siteOnly }` in sign-up order, cut under Discord's 2,000 characters. */
+function whoReply(t, name, list) {
+  if (!list.length) return `Nobody has signed up for ${name} yet.`;
+  const confirming = t.phase === "confirming";
+  let text = confirming ? `**${list.length} signed up · ${list.filter((e) => e.confirmed).length} confirmed**` : `**${list.length} signed up**`;
+  for (const [i, e] of list.entries()) {
+    const mark = e.siteOnly ? " · on the site" : confirming && e.confirmed ? " ✅" : "";
+    const line = `\n${i + 1}. ${escapeMarkdown(e.name)}${mark}`;
+    if (text.length + line.length > MESSAGE_MAX - 20) {
+      text += `\n…and ${list.length - i} more`;
+      break;
     }
-    return { reply: text, changed };
+    text += line;
   }
+  return text;
+}
 
-  if (closed) return closedReply;
+async function register(env, interaction, t, name, userId, nowMs) {
+  if (!signsUp(env)) return addEntrant(env, t, name, userId, displayName(interaction), nowMs);
+  // Not on the site's list yet (or it refused their name): the form signs them up there.
+  const row = await env.DB.prepare("SELECT confirmed, on_site FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(t.id, userId).first();
+  return row?.on_site === 1 ? { reply: alreadyReply(t, name, row) } : { form: nameForm(t, interaction) };
+}
 
-  if (action === "unreg") {
-    const answer = await site.unregister(id, userId);
-    if (answer.status === 409) return closedReply;
-    const gone = await env.DB.prepare("DELETE FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
-    // Their row may have counted towards Confirmed.
-    const changed = setSiteCount(t, answer.signups?.count) || gone.meta.changes > 0;
-    if (!answer.removed && !gone.meta.changes) return { reply: `You weren't registered for ${name}.`, changed };
-    return { reply: `You're no longer registered for ${name}.`, changed };
-  }
-
-  // The form's sign-up.
+/** The form's sign-up on the site, then here. */
+async function siteRegister(env, site, t, name, userId, ign, nowMs) {
   if (!ign) return { reply: "Type your in-game name to register." };
-  const answer = await site.signUp(id, [{ discordUserId: userId, name: ign }]);
-  if (answer.status === 409) return closedReply;
+  const answer = await site.signUp(t.id, [{ discordUserId: userId, name: ign }]);
+  if (answer.status === 409) return { reply: `Sign-ups for ${name} are closed.` };
   const result = answer.results?.[0];
   if (!result) return { reply: `I can't find ${name} on the site.` };
   const changed = setSiteCount(t, answer.signups?.count);
@@ -496,38 +449,57 @@ async function siteAnswer(env, site, t, userId, action, ign, nowMs) {
     case "conflict":
       return { reply: "The sign-ups changed just now. Press **Register** again.", changed };
   }
-  // created, linked (they'd typed the name on the site) or exists. A row the site didn't have
-  // (registered before SITE_TOKEN, or its name refused) is now on its list, under this name.
-  const confirming = t.phase === "confirming" && nowMs < t.starts_at * 1000;
-  const done = await env.DB.prepare(
-    `INSERT INTO entrants (tournament_id, user_id, name, registered_at, confirmed, dm_status, on_site) VALUES (?, ?, ?, ?, ?, 'none', 1)
-     ON CONFLICT (tournament_id, user_id) DO UPDATE SET name = excluded.name, on_site = 1, confirmed = MAX(confirmed, excluded.confirmed)
-     WHERE on_site != 1`,
-  )
-    .bind(id, userId, result.signup?.name ?? ign, nowMs, confirming ? 1 : 0)
-    .run();
-  if (!done.meta.changes) {
-    const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
-    return { reply: alreadyReply(t, name, row ?? {}), changed };
-  }
+  // created, linked (they'd typed the name on the site) or exists.
   const as = result.signup && result.signup.name !== ign ? ` as **${escapeMarkdown(result.signup.name)}**` : "";
-  // A confirmed newcomer changes the post's Confirmed count.
-  return { reply: registeredReply(env, t, name, nowMs, as), changed: changed || confirming };
-}
-
-export async function refreshPostById(env, discord, id) {
-  const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
-  if (t && (t.phase === "open" || t.phase === "confirming")) await refreshPost(env, discord, t);
+  const added = await addEntrant(env, t, name, userId, result.signup?.name ?? ign, nowMs, true, as);
+  return { ...added, changed: changed || added.changed };
 }
 
 /**
- * The Confirm button in the DM. Returns `{ message, changed }`: the DM's new content (the message is
- * updated in place), and whether the post's Confirmed count needs refreshing.
+ * Registers them here (`onSite`: they're on the site's list). A row the site didn't have yet
+ * (registered before SITE_TOKEN, or its name refused) is now on its list, under this name.
  */
-export async function confirmButton(env, interaction, id, nowMs = Date.now()) {
+async function addEntrant(env, t, name, userId, entrantName, nowMs, onSite = false, as = "") {
+  const confirming = t.phase === "confirming" && nowMs < t.starts_at * 1000;
+  const done = await env.DB.prepare(
+    `INSERT INTO entrants (tournament_id, user_id, name, registered_at, confirmed, dm_status, on_site) VALUES (?, ?, ?, ?, ?, 'none', ?)
+     ON CONFLICT (tournament_id, user_id) DO UPDATE SET name = excluded.name, on_site = 1, confirmed = MAX(confirmed, excluded.confirmed)
+     WHERE excluded.on_site = 1 AND on_site != 1`,
+  )
+    .bind(t.id, userId, entrantName, nowMs, confirming ? 1 : 0, onSite ? 1 : 0)
+    .run();
+  if (!done.meta.changes) {
+    const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(t.id, userId).first();
+    return { reply: alreadyReply(t, name, row ?? {}) };
+  }
+  // The post counts the bot's own sign-ups, or with the site's only who confirmed.
+  return { reply: registeredReply(env, t, name, nowMs, as), changed: !signsUp(env) || confirming };
+}
+
+async function unregister(env, site, t, name, userId) {
+  let removed = false;
+  let changed = false;
+  if (signsUp(env)) {
+    const answer = await site.unregister(t.id, userId);
+    if (answer.status === 409) return { reply: `Sign-ups for ${name} are closed.` };
+    removed = Boolean(answer.removed);
+    changed = setSiteCount(t, answer.signups?.count);
+  }
+  const gone = await env.DB.prepare("DELETE FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(t.id, userId).run();
+  // Their row counted on the post: as a sign-up, or towards Confirmed.
+  changed ||= gone.meta.changes > 0;
+  if (!removed && !gone.meta.changes) return { reply: `You weren't registered for ${name}.`, changed };
+  return { reply: `You're no longer registered for ${name}.`, changed };
+}
+
+/**
+ * The Confirm button in the DM. Returns `{ message, refresh }`: the DM's new content (the message is
+ * updated in place), and the post's refresh when its Confirmed count changed.
+ */
+export async function confirmButton(env, discord, interaction, id, nowMs = Date.now()) {
   const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
   const name = t ? `**${escapeMarkdown(t.name)}**` : "this tournament";
-  const done = (content, changed = false) => ({ message: { content, components: [], allowed_mentions: NO_PINGS }, changed });
+  const done = (content, refresh) => ({ message: { content, components: [], allowed_mentions: NO_PINGS }, refresh });
   if (!t) return done("I don't know that tournament.");
   if (t.phase === "cancelled") return done(`${name} was cancelled.`);
   if (t.phase !== "confirming" || nowMs >= t.starts_at * 1000) return done(`Too late: ${name} has started and the list is out.`);
@@ -535,7 +507,7 @@ export async function confirmButton(env, interaction, id, nowMs = Date.now()) {
   const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
   if (!row) return done(`You're not registered for ${name} any more, so there's nothing to confirm.`);
   if (!row.confirmed) await env.DB.prepare("UPDATE entrants SET confirmed = 1 WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
-  return done(`✅ **Confirmed.** You're on the list for ${name}. Good luck!`, !row.confirmed);
+  return done(`✅ **Confirmed.** You're on the list for ${name}. Good luck!`, row.confirmed ? undefined : refreshLater(env, discord, t));
 }
 
 // ---- The cron, every minute ----

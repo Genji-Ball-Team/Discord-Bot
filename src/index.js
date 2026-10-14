@@ -8,20 +8,10 @@
 import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { postResults } from "./results.js";
-import { Site, signsUp } from "./site.js";
+import { Site } from "./site.js";
 import { autocompletePlayers, renderStats } from "./stats.js";
 import { minutes } from "./time.js";
-import {
-  confirmButton,
-  formName,
-  parseTourneyButton,
-  refreshPostById,
-  runTournaments,
-  signupButton,
-  siteSignup,
-  syncTourneys,
-  tourneyMinutes,
-} from "./tournament.js";
+import { callsSite, confirmButton, parseTourneyButton, runTournaments, signup, syncTourneys, tourneyMinutes } from "./tournament.js";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 const privateReply = (content) => json({ type: ResponseType.MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: NO_PINGS } });
@@ -142,19 +132,11 @@ async function handleCommand(env, ctx, interaction) {
 async function handleButton(env, ctx, interaction) {
   const tourney = parseTourneyButton(interaction.data.custom_id);
   if (tourney?.action === "conf") {
-    const { message, changed } = await confirmButton(env, interaction, tourney.id);
-    if (changed) ctx.waitUntil(refreshPostById(env, new Discord(env), tourney.id).catch((e) => console.error("refresh post", e)));
+    const { message, refresh } = await confirmButton(env, new Discord(env), interaction, tourney.id);
+    if (refresh) ctx.waitUntil(refresh());
     return json({ type: ResponseType.UPDATE_MESSAGE, data: message });
   }
-  if (tourney && signsUp(env) && (tourney.action === "unreg" || tourney.action === "who")) {
-    return siteSignupReply(env, ctx, interaction, tourney);
-  }
-  if (tourney) {
-    const { reply, changed, form } = await signupButton(env, interaction, tourney.action, tourney.id);
-    if (form) return json({ type: ResponseType.MODAL, data: form });
-    if (changed) ctx.waitUntil(refreshPostById(env, new Discord(env), tourney.id).catch((e) => console.error("refresh post", e)));
-    return privateReply(reply);
-  }
+  if (tourney) return signupReply(env, ctx, interaction, tourney);
 
   const target = parseButton(interaction.data.custom_id);
   if (!target) return json({ type: ResponseType.DEFERRED_UPDATE });
@@ -176,17 +158,28 @@ async function handleButton(env, ctx, interaction) {
   return json(live ? { type: ResponseType.DEFERRED_MESSAGE, data: { flags: EPHEMERAL } } : { type: ResponseType.DEFERRED_UPDATE });
 }
 
-/** A sign-up that calls the site (one list with it): answered privately once the site has. */
-function siteSignupReply(env, ctx, interaction, tourney, ign) {
+/** A sign-up button or form, answered privately: at once, or once the site has. */
+async function signupReply(env, ctx, interaction, tourney) {
   const discord = new Discord(env);
-  return deferred(ctx, discord, interaction, () => siteSignup(env, new Site(env), discord, interaction, tourney.action, tourney.id, ign), { ephemeral: true });
+  const answer = () => signup(env, new Site(env), discord, interaction, tourney.action, tourney.id);
+  if (callsSite(env, tourney.action)) {
+    const work = async () => {
+      const { reply, refresh } = await answer();
+      await refresh?.();
+      return reply;
+    };
+    return deferred(ctx, discord, interaction, work, { ephemeral: true });
+  }
+  const { reply, form, refresh } = await answer();
+  if (refresh) ctx.waitUntil(refresh());
+  return form ? json({ type: ResponseType.MODAL, data: form }) : privateReply(reply);
 }
 
 /** Register's in-game name form, sent. */
 function handleForm(env, ctx, interaction) {
   const tourney = parseTourneyButton(interaction.data?.custom_id);
   if (tourney?.action !== "ign") return privateReply("I don't know that form.");
-  return siteSignupReply(env, ctx, interaction, tourney, formName(interaction));
+  return signupReply(env, ctx, interaction, tourney);
 }
 
 async function handleAutocomplete(env, interaction) {
