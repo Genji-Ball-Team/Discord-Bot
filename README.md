@@ -34,7 +34,7 @@ With the `SITE_TOKEN` secret set, Discord and the tourney's page on genjiball.us
 - The post's count and **Who's signed up** are the site's: names typed on the page are counted and listed ("on the site"). A name typed on the page shows up on the post within 5 minutes.
 - An admin who removes you on the site's admin page removes you here too: no Confirm DM, not on the list.
 - Players who signed up only on the page can't get the Confirm DM. The list at the start names them apart, for the hosts.
-- Registrations from before `SITE_TOKEN` was set are sent within 5 minutes, under the server name they registered with. One whose name another Discord user already has stays registered in Discord only.
+- Registrations from before `SITE_TOKEN` was set are sent within 5 minutes, under the server name they registered with. One whose name another Discord user already has stays registered in Discord only, until the player presses **Register** again and types another name.
 
 Without `SITE_TOKEN` the bot keeps its own list, as before, and doesn't use the page's sign-ups.
 

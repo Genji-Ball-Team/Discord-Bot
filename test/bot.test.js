@@ -5,7 +5,8 @@ import { commands } from "../scripts/commands.js";
 import worker, { optionsOf } from "../src/index.js";
 import { parseButton, renderLeaderboard } from "../src/leaderboard.js";
 import { Site } from "../src/site.js";
-import { listMessages } from "../src/tournament.js";
+import { Discord } from "../src/discord.js";
+import { listMessages, runTournaments } from "../src/tournament.js";
 import { resultsPost } from "../src/results.js";
 import { minutes } from "../src/time.js";
 import { ENV, STAFF, fakeCtx, fakeD1, installFetch } from "./helpers.js";
@@ -179,6 +180,9 @@ test("a tourney made on the site, from its sign-up post to the final list", asyn
   assert.equal(confirmed.type, 7);
   assert.match(confirmed.data.content, /Confirmed/);
   assert.deepEqual(confirmed.data.components, []);
+  // The post's Confirmed count follows.
+  const lastEdit = calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/channels/signups/messages/")).at(-1);
+  assert.deepEqual(lastEdit.body.embeds[0].fields.find((f) => f.name === "Confirmed").value, "**1**");
   assert.match((await send(e, press(`gr:reg:${id}`, player("p5")))).data.content, /registered and confirmed/);
   assert.match((await send(e, press(`gr:who:${id}`, player("p9")))).data.content, /4 signed up · 2 confirmed/);
 
@@ -281,6 +285,72 @@ test("a long list is split under 2,000 characters", () => {
   assert.deepEqual(listMessages({ name: "X" }, []), ["📋 **X** · **0 confirmed players**\nNobody confirmed, so this tournament has no players."]);
 });
 
+test("a list the run can't send whole waits for the next run, and is posted once", async () => {
+  const e = env();
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  // 300 confirmed players: five list messages.
+  for (let i = 0; i < 300; i++) {
+    e.DB.raw.prepare("INSERT INTO entrants (tournament_id, user_id, name, registered_at, confirmed) VALUES (?, ?, 'x', ?, 1)").run(t.id, `1234567890123456${String(i).padStart(3, "0")}`, i);
+  }
+  e.DB.raw.prepare("UPDATE tournaments SET phase = 'confirming' WHERE id = ?").run(t.id);
+
+  // A run with only four requests left: the last look at the site, then not enough for the list.
+  const discord = new Discord(e, 4);
+  const site = new Site(e);
+  await runTournaments(e, discord, site, () => discord.left - site.calls, START);
+  assert.equal(posts(calls, "signups").length, 1);
+  await cron(e, START + 60_000);
+  assert.equal(posts(calls, "signups").length, 1 + 5);
+});
+
+test("tourneys waiting for their standings don't hold up a starting one", async () => {
+  const e = env();
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  await send(e, press(`gr:reg:${t.id}`, player("p1")));
+  // Five earlier tourneys, started, their standings not on the site yet.
+  for (let id = 1; id <= 5; id++) {
+    e.DB.raw
+      .prepare("INSERT INTO tournaments (id, region, name, starts_at, channel_id, phase, created_by, created_at) VALUES (?, 'eu', 'Old', ?, 'signups', 'started', 'site', 0)")
+      .run(id, START / 1000 - id * 3600);
+  }
+  await cron(e, START - 5 * 60_000);
+  assert.deepEqual(calls.filter((c) => c.method === "POST" && c.path?.startsWith("/channels/dm-")).map((c) => c.path), ["/channels/dm-p1/messages"]);
+});
+
+test("a DM error stops the run, but nobody gets their DM twice", async () => {
+  const e = env();
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys, discordDown: ({ method, path }) => method === "POST" && path === "/channels/dm-p2/messages" });
+  const t = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  await send(e, press(`gr:reg:${t.id}`, player("p1")));
+  await cron(e, NOW + 60_000);
+  await send(e, press(`gr:reg:${t.id}`, player("p2")));
+  await cron(e, START - 5 * 60_000);
+  await cron(e, START - 4 * 60_000);
+  assert.equal(calls.filter((c) => c.method === "POST" && c.path === "/channels/dm-p1/messages").length, 1);
+});
+
+test("deleted on the site just before the start: cancelled, no list", async () => {
+  const e = env();
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  await send(e, press(`gr:reg:${t.id}`, player("p1")));
+  await cron(e, START - 5 * 60_000);
+  siteTourneys.delete(t.id);
+  await cron(e, START);
+  assert.equal(posts(calls, "signups").length, 1);
+  assert.match(calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/channels/signups/")).at(-1).body.embeds[0].title, /Cancelled/);
+});
+
 // ---------- one sign-up list with the site (SITE_TOKEN) ----------
 
 const form = (id, value, member) => ({
@@ -334,8 +404,13 @@ test("with SITE_TOKEN, Discord and the site share one sign-up list", async () =>
   assert.match((await send(e, press(`gr:reg:${id}`, player("p1")))).data.content, /already registered/);
 
   // Who's signed up: the site's list.
+  const editsBefore = postEdits(calls).length;
   await send(e, press(`gr:who:${id}`, player("p9")));
   assert.equal(lastOriginal(calls).content, "**3 signed up**\n1. Ada\n2. Zed · on the site\n3. Kenzo");
+  // Nothing changed, so the post isn't edited.
+  await send(e, press(`gr:unreg:${id}`, player("p9")));
+  assert.match(lastOriginal(calls).content, /weren't registered/);
+  assert.equal(postEdits(calls).length, editsBefore);
 
   // A name signed up on the page meanwhile: the post follows on the sync.
   siteSignups.get(id).push({ name: "Late", discordUserId: null, signedUpAt: "2026-10-06T11:00:00Z" });
@@ -394,6 +469,48 @@ test("registrations from before SITE_TOKEN are sent to the site on the sync", as
   const before = writes();
   await cron(synced, NOW + 10 * 60_000);
   assert.equal(writes(), before);
+});
+
+test("a player whose name the site refused can register again under another", async () => {
+  const siteTourneys = new Map();
+  const siteSignups = new Map();
+  const calls = installFetch({ siteTourneys, siteSignups });
+  const { id } = siteTourney(siteTourneys);
+  siteSignups.set(id, [{ name: "Kenzo", discordUserId: "p7", signedUpAt: "2026-10-06T09:00:00Z" }]);
+  const e = env();
+  await cron(e, NOW);
+  await send(e, press(`gr:reg:${id}`, player("p1", "Kenzo")));
+
+  // Another Discord user has Kenzo on the site: p1 stays registered here, off the site's list.
+  const synced = { ...e, SITE_TOKEN: "site-token" };
+  await cron(synced, NOW + 5 * 60_000);
+  const row = () => e.DB.prepare("SELECT name, on_site FROM entrants WHERE user_id = 'p1'").first();
+  assert.equal((await row()).on_site, 2);
+
+  // Register asks for a name again, and the form puts them on the site's list.
+  assert.equal((await send(synced, press(`gr:reg:${id}`, player("p1", "Kenzo")))).type, 9);
+  await send(synced, form(id, "Kenzo2", player("p1")));
+  assert.match(lastOriginal(calls).content, /You're registered for/);
+  assert.deepEqual({ ...(await row()) }, { name: "Kenzo2", on_site: 1 });
+  assert.ok(siteSignups.get(id).some((s) => s.name === "Kenzo2" && s.discordUserId === "p1"));
+});
+
+test("a post edit that failed is made again on the next sync", async () => {
+  const e = env({ SITE_TOKEN: "site-token" });
+  const siteTourneys = new Map();
+  const siteSignups = new Map();
+  let down = false;
+  const calls = installFetch({ siteTourneys, siteSignups, discordDown: ({ method }) => down && method === "PATCH" });
+  const { id } = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  siteSignups.set(id, [{ name: "Late", discordUserId: null, signedUpAt: "2026-10-06T11:00:00Z" }]);
+  down = true;
+  await cron(e, NOW + 5 * 60_000);
+  assert.equal(postEdits(calls).length, 1);
+  down = false;
+  await cron(e, NOW + 10 * 60_000);
+  assert.equal(postEdits(calls).length, 2);
+  assert.equal(shownCount(calls), "1");
 });
 
 // ---------- tournament results ----------
