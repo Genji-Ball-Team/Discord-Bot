@@ -368,8 +368,20 @@ function registeredReply(env, t, name, nowMs, as = "") {
 /** Whether the button's answer needs the site, so it's sent once the site has answered. */
 export const callsSite = (env, action) => signsUp(env) && action !== "reg";
 
-/** A post refresh to run after answering. A failure is logged: the answer stands. */
-const refreshLater = (env, discord, t) => () => refreshPost(env, discord, t).catch((e) => console.error("refresh post", e));
+/**
+ * A post refresh to run after answering, on the row as it is by then: the cron may have cancelled,
+ * started or moved the tourney meanwhile. `signups`: a site count this answer just fetched, shown
+ * (and saved) instead of the row's. A failure is logged: the answer stands.
+ */
+const refreshLater = (env, discord, id, signups) => async () => {
+  try {
+    const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
+    if (t?.phase !== "open" && t?.phase !== "confirming") return;
+    await refreshPost(env, discord, { ...t, signups: signups ?? t.signups });
+  } catch (e) {
+    console.error("refresh post", e);
+  }
+};
 
 /**
  * Register, Unregister and Who's signed up on the post, and Register's in-game name form (`ign`).
@@ -383,6 +395,7 @@ export async function signup(env, site, discord, interaction, action, id, nowMs 
   if (t.phase === "cancelled") return { reply: `${name} was cancelled.` };
   const open = t.phase === "open" || t.phase === "confirming";
   const userId = userOf(interaction)?.id;
+  const savedCount = t.signups;
   let answer;
   if (action === "who") answer = await who(env, site, t, name);
   else if (!open) answer = { reply: `Sign-ups for ${name} are closed.` };
@@ -390,7 +403,8 @@ export async function signup(env, site, discord, interaction, action, id, nowMs 
   else if (action === "ign") answer = await siteRegister(env, site, t, name, userId, formName(interaction), nowMs);
   else answer = await unregister(env, site, t, name, userId);
   const { changed, ...rest } = answer;
-  return changed && open ? { ...rest, refresh: refreshLater(env, discord, t) } : rest;
+  if (!changed || !open) return rest;
+  return { ...rest, refresh: refreshLater(env, discord, t.id, t.signups !== savedCount ? t.signups : undefined) };
 }
 
 /** Who's signed up: the site's list when it's one list with it, else the bot's own. */
@@ -451,7 +465,7 @@ async function siteRegister(env, site, t, name, userId, ign, nowMs) {
   }
   // created, linked (they'd typed the name on the site) or exists.
   const as = result.signup && result.signup.name !== ign ? ` as **${escapeMarkdown(result.signup.name)}**` : "";
-  const added = await addEntrant(env, t, name, userId, result.signup?.name ?? ign, nowMs, true, as);
+  const added = await addEntrant(env, t, name, userId, result.signup?.name ?? ign, nowMs, { onSite: true, as });
   return { ...added, changed: changed || added.changed };
 }
 
@@ -459,7 +473,7 @@ async function siteRegister(env, site, t, name, userId, ign, nowMs) {
  * Registers them here (`onSite`: they're on the site's list). A row the site didn't have yet
  * (registered before SITE_TOKEN, or its name refused) is now on its list, under this name.
  */
-async function addEntrant(env, t, name, userId, entrantName, nowMs, onSite = false, as = "") {
+async function addEntrant(env, t, name, userId, entrantName, nowMs, { onSite = false, as = "" } = {}) {
   const confirming = t.phase === "confirming" && nowMs < t.starts_at * 1000;
   const done = await env.DB.prepare(
     `INSERT INTO entrants (tournament_id, user_id, name, registered_at, confirmed, dm_status, on_site) VALUES (?, ?, ?, ?, ?, 'none', ?)
@@ -507,7 +521,7 @@ export async function confirmButton(env, discord, interaction, id, nowMs = Date.
   const row = await env.DB.prepare("SELECT confirmed FROM entrants WHERE tournament_id = ? AND user_id = ?").bind(id, userId).first();
   if (!row) return done(`You're not registered for ${name} any more, so there's nothing to confirm.`);
   if (!row.confirmed) await env.DB.prepare("UPDATE entrants SET confirmed = 1 WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
-  return done(`✅ **Confirmed.** You're on the list for ${name}. Good luck!`, row.confirmed ? undefined : refreshLater(env, discord, t));
+  return done(`✅ **Confirmed.** You're on the list for ${name}. Good luck!`, row.confirmed ? undefined : refreshLater(env, discord, t.id));
 }
 
 // ---- The cron, every minute ----
