@@ -115,6 +115,12 @@ export class Site {
   }
 }
 
+/**
+ * The tier to show: the site's `siteTier`, which has Rookie (on the site and here, not in game),
+ * else `tier` (a site from before Rookie).
+ */
+export const shownTier = (rating) => rating?.siteTier ?? rating?.tier ?? null;
+
 /** A tier's colour as Discord's embed colour number. */
 export function tierColor(tier) {
   if (!tier?.color) return 0x5865f2;

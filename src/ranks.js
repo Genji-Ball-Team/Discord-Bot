@@ -12,7 +12,7 @@
 // src/site/titles.ts), and `/gr leaderboard` from the site's `/api/titles`.
 
 import { NO_PINGS, lostAccess } from "./discord.js";
-import { escapeMarkdown } from "./site.js";
+import { escapeMarkdown, shownTier } from "./site.js";
 import { minutes } from "./time.js";
 
 export const rankMinutes = (env) => minutes(env.RANK_REFRESH_MINUTES);
@@ -47,7 +47,7 @@ const tierIndex = (env, label) => rankRoles(env).findIndex((r) => r.label === la
 
 /** A player's rank: their highest tier in any region (`/api/tiers`), or "" for Unranked. */
 export function rankOf(env, player) {
-  const labels = Object.values(player?.regions ?? {}).map((r) => r.tier?.label);
+  const labels = Object.values(player?.regions ?? {}).map((r) => shownTier(r)?.label);
   const best = labels.reduce((top, label) => (tierIndex(env, label) > tierIndex(env, top) ? label : top), "");
   return tierIndex(env, best) >= 0 ? best : "";
 }

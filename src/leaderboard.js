@@ -3,7 +3,7 @@
 // place, and the rest are numbered from 1 without them, as on the site.
 
 import { NO_PINGS, RED } from "./discord.js";
-import { REGIONS, escapeMarkdown, regionOf } from "./site.js";
+import { REGIONS, escapeMarkdown, regionOf, shownTier } from "./site.js";
 
 export const PAGE_SIZE = 15;
 export const MAX_PAGES = 5;
@@ -31,7 +31,7 @@ function formatLines(players) {
   return players.map((p) => {
     const place = "`" + `${p.rank}.`.padStart(width, " ") + "`";
     const name = p.name.length > 20 ? p.name.slice(0, 19) + "…" : p.name;
-    return `${place} **${escapeMarkdown(name)}** — ${p.tier?.label ?? "Unranked"} · **${Math.round(p.rating)} Elo**`;
+    return `${place} **${escapeMarkdown(name)}** — ${shownTier(p)?.label ?? "Unranked"} · **${Math.round(p.rating)} Elo**`;
   });
 }
 
