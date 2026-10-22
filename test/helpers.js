@@ -49,7 +49,9 @@ function signupsOf(siteSignups, id) {
  * Installs a fake fetch. Discord and site calls are recorded in `calls`; `closedDms` users answer
  * 403 to a DM; Discord answers 500 to the calls `discordDown({ method, path })` picks (429 when it
  * returns 429);
- * `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id.
+ * `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id. `members` are the
+ * server's members (`{ user: { id }, roles }`), changed by the role calls; `tiers` the site's
+ * `/api/tiers` answer by player id, `titles` its `/api/titles` list by region.
  */
 export function installFetch({
   closedDms = new Set(),
@@ -59,6 +61,9 @@ export function installFetch({
   siteSignups = new Map(),
   siteDown = false,
   feed = { entries: [], details: new Map() },
+  members = [],
+  tiers = new Map(),
+  titles = {},
 } = {}) {
   const calls = [];
   let nextId = 5000;
@@ -127,6 +132,11 @@ export function installFetch({
         const past = mine.filter((t) => t.status === "done" || t.status === "cancelled");
         return reply({ region: url.searchParams.get("region"), page: 1, upcoming, past });
       }
+      if (url.pathname === "/api/tiers") {
+        const ids = url.searchParams.get("players").split(",").map(Number);
+        return reply({ players: ids.filter((id) => tiers.has(id)).map((id) => ({ id, ...tiers.get(id) })) });
+      }
+      if (url.pathname === "/api/titles") return reply({ region: url.searchParams.get("region"), titles: titles[url.searchParams.get("region")] ?? [] });
       const pub = /^\/api\/tourneys\/(\d+)$/.exec(url.pathname);
       if (pub) {
         if (siteDown) return reply({ error: "internal" }, 500);
@@ -189,6 +199,17 @@ export function installFetch({
       }
       if (method === "PATCH" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply({ id: "x", ...body });
       if (method === "DELETE" && /^\/channels\/[^/]+\/messages\/[^/]+$/.test(path)) return reply(null, 204);
+      if (method === "GET" && /^\/guilds\/[^/]+\/members$/.test(path)) {
+        const after = url.searchParams.get("after") ?? "0";
+        return reply(members.filter((m) => BigInt(m.user.id) > BigInt(after)).slice(0, 1000));
+      }
+      if ((m = /^\/guilds\/[^/]+\/members\/([^/]+)\/roles\/([^/]+)$/.exec(path))) {
+        const member = members.find((x) => x.user.id === m[1]);
+        if (!member) return reply({ message: "Unknown Member" }, 404);
+        member.roles = member.roles.filter((r) => r !== m[2]);
+        if (method === "PUT") member.roles.push(m[2]);
+        return reply(null, 204);
+      }
       if (method === "POST" && path === "/users/@me/channels") {
         return reply({ id: `dm-${body.recipient_id}` });
       }

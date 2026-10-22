@@ -72,6 +72,16 @@ export class Site {
     return this.get("/api/leaderboard", { region, page });
   }
 
+  /** Each player's rating and tier in every region, for the rank roles: at most 200 ids. */
+  tiers(ids) {
+    return this.get("/api/tiers", { players: ids.join(",") });
+  }
+
+  /** The region's God and Demigod, with their rating and real place on the leaderboard. */
+  titles(region) {
+    return this.get("/api/titles", { region });
+  }
+
   search(text, region) {
     return this.get("/api/players", { search: text, region });
   }

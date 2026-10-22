@@ -1,5 +1,5 @@
 // Talking to Discord: checking that a request really comes from Discord, and the few REST calls the
-// bot makes (post, edit and delete messages, open DMs).
+// bot makes (post, edit and delete messages, open DMs, read the members and change their rank roles).
 
 const API = "https://discord.com/api/v10";
 
@@ -106,5 +106,18 @@ export class Discord {
 
   openDm(userId) {
     return this.call("POST", "/users/@me/channels", { recipient_id: userId });
+  }
+
+  /** Up to 1,000 members after `after` (a user id), with their roles. Needs the Server Members intent. */
+  listMembers(guildId, after = "0") {
+    return this.call("GET", `/guilds/${guildId}/members?limit=1000&after=${after}`);
+  }
+
+  addRole(guildId, userId, roleId) {
+    return this.call("PUT", `/guilds/${guildId}/members/${userId}/roles/${roleId}`);
+  }
+
+  removeRole(guildId, userId, roleId) {
+    return this.call("DELETE", `/guilds/${guildId}/members/${userId}/roles/${roleId}`);
   }
 }
