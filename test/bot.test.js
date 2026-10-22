@@ -82,7 +82,7 @@ function siteTourney(siteTourneys, fields = {}) {
 
 test("every command is under /gr, and there's no /gr host", () => {
   assert.deepEqual(commands.map((c) => c.name), ["gr"]);
-  assert.deepEqual(commands[0].options.map((o) => o.name), ["stats", "leaderboard", "setup"]);
+  assert.deepEqual(commands[0].options.map((o) => o.name), ["stats", "leaderboard", "link", "unlink", "setup"]);
 });
 
 test("reads /gr setup leaderboard's path and options", () => {
@@ -104,6 +104,24 @@ test("staff commands are staff only; everyone can use /gr stats", async () => {
 
   const admin = { user: { id: "owner" }, roles: [], permissions: String(1n << 3n) };
   assert.equal((await send(e, { ...gr("leaderboard", null, []), member: admin })).type, 5);
+});
+
+test("/gr link is staff only, uses the member's roles from the command and answers privately", async () => {
+  const e = env({ RANK_ROLES: "Master=12", UNRANKED_ROLE_ID: "10", DISCORD_GUILD_ID: "guild1" });
+  const members = [{ user: { id: "100" }, roles: ["10"] }];
+  const calls = installFetch({ members, tiers: new Map([[7, { playerId: 7, name: "Fealthy", regions: { eu: { tier: { label: "Master" } } } }]]) });
+  const linkCommand = gr("link", null, [
+    { type: 6, name: "user", value: "100" },
+    { type: 3, name: "player", value: "7" },
+  ]);
+  // Discord sends the picked member, with their roles, under `resolved`.
+  const command = (member) => ({ ...linkCommand, member, data: { ...linkCommand.data, resolved: { members: { 100: { roles: ["10"] } } } } });
+  assert.match((await send(e, command(player("p1")))).data.content, /Only \*\*Staff\*\*/);
+  const res = await send(e, command(STAFF));
+  assert.equal(res.data.flags, 64);
+  assert.match(lastOriginal(calls).content, /Linked <@100> to \*\*Fealthy\*\*.*\*\*Master\*\*/);
+  assert.deepEqual(lastOriginal(calls).allowed_mentions, { parse: [] });
+  assert.deepEqual(members[0].roles, ["12"]);
 });
 
 test("a /gr stats name that isn't found is echoed escaped, pinging nobody", async () => {

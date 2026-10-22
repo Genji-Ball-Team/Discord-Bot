@@ -60,3 +60,22 @@ CREATE TABLE IF NOT EXISTS result_posts (
   message_id TEXT NOT NULL,
   shown TEXT NOT NULL
 );
+
+-- Members linked to their genjiball.us player (/gr link), for their rank role (src/ranks.js). `rank`:
+-- the tier the bot last gave them, '' for Unranked, NULL before the first check; a climb past it is
+-- posted once. `name`: their name on the site then.
+CREATE TABLE IF NOT EXISTS links (
+  user_id TEXT PRIMARY KEY,
+  player_id INTEGER NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  rank TEXT,
+  linked_at INTEGER NOT NULL           -- ms
+);
+
+-- Linked players with a title role (God, Demigod) at the last rank check, for the site (GET /titles).
+CREATE TABLE IF NOT EXISTS titles (
+  player_id INTEGER NOT NULL,
+  region TEXT NOT NULL,                -- 'eu' or 'na'
+  title TEXT NOT NULL,                 -- 'God' or 'Demigod'
+  PRIMARY KEY (player_id, region, title)
+);

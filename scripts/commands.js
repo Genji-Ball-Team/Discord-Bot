@@ -42,6 +42,21 @@ export const commands = [
         ],
       },
       {
+        type: 1,
+        name: "link",
+        description: "Staff: link a member to their genjiball.us player, for their rank role",
+        options: [
+          { type: 6, name: "user", description: "The member", required: true },
+          { type: 3, name: "player", description: "Their name on genjiball.us", required: true, autocomplete: true },
+        ],
+      },
+      {
+        type: 1,
+        name: "unlink",
+        description: "Staff: remove a member's link: back to Unranked",
+        options: [{ type: 6, name: "user", description: "The member", required: true }],
+      },
+      {
         type: 2,
         name: "setup",
         description: "Staff: set up the bot",

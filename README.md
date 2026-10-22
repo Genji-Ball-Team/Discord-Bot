@@ -10,6 +10,8 @@ Everything is under **`/gr`**.
 |---|---|---|
 | `/gr stats player [region]` | Everyone | A player's rating, tier, rank, rounds, win %, kills, deflects, peak, streaks and recent form. Names autocomplete. |
 | `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard. Its buttons flip that message. |
+| `/gr link user player` | Staff | Links a member to their genjiball.us player (names autocomplete) and gives them their **rank role** at once. See [Rank roles](#rank-roles). |
+| `/gr unlink user` | Staff | Removes the link and puts them back on Unranked. |
 | `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 15, updated every 5 minutes, EU/NA and pages up to the top 75). Its buttons open a private copy, so the channel's board stays the same for everyone. |
 
 "Staff" means the role in `STAFF_ROLE_ID`, plus server admins. Anyone else gets "Only Staff can use this".
@@ -44,6 +46,28 @@ Every tournament match the site rates is posted in `RESULTS_CHANNEL_ID`, one pos
 
 The bot follows the site's match feed (checked every 5 minutes; the site rates every 10), so a result shows up about 10–15 minutes after the match is uploaded. A longer copy of the match edits the post, and a voided match's post is deleted. A later recompute of the ratings doesn't change a post that's already up. Matches from before the bot started following the feed are never posted.
 
+## Rank roles
+
+Staff link each member to their genjiball.us player with `/gr link`. From then on the bot keeps one rank role on them, the role of their tier in `RANK_ROLES` (Apprentice, Master, Grandmaster, Ascendant, Champion, Sovereign), or `UNRANKED_ROLE_ID` below Apprentice or before they're rated:
+
+- **Their best region counts.** Grandmaster in EU and Apprentice in NA gets Grandmaster.
+- **Every 5 minutes** (`RANK_REFRESH_MINUTES`) it reads the server's members and every linked player's tier from the site (one request each), and fixes whoever's role is wrong: a climb or drop, a rank role changed by hand, someone who left and rejoined. The site rates every 10 minutes, so a change shows within about 15.
+- **A climb** is posted in `RANKUP_CHANNEL_ID`: "**Fealthy** has ranked up to **Grandmaster** 🏆", pinging nobody. Drops and new links aren't posted.
+- It only ever adds or removes the rank roles, one at a time. Every other role stays as it is. Inactive players keep their rank.
+- Unlinked members are never touched.
+
+It needs two things in Discord: **Server Members Intent** on (Developer Portal → Bot), and the bot's role **above all the rank roles**, with **Manage Roles** (Server Settings → Roles). It can't change the server owner's roles.
+
+### God and Demigod
+
+The 1v1 tourney's winner is **God** and the runner-up **Demigod** (at most 1 and 3 per region). They're titles, not ranks: Staff give the roles in `GOD_ROLE_IDS` and `DEMIGOD_ROLE_IDS` by hand, one per region, and the player keeps their rank role too. The bot only reads them, for linked members, at each check:
+
+- `/gr leaderboard` and the live leaderboard list them above everyone on page 1 (God, then Demigod) with their Elo and their @mention, which Discord colours with their role and which pings nobody. The rest are numbered from 1 without them.
+- genjiball.us shows them the same way on its leaderboard (God white, Demigod dark red): it reads them from the bot's `GET /titles` (genjiball-ranked `src/site/titles.ts`).
+- The game doesn't change: its top 10 and rank tags stay the real ratings.
+
+A title role on someone who isn't linked does nothing: `/gr link` them first.
+
 ## Deploying a change
 
 Open a terminal in this folder (in File Explorer: click the address bar, type `cmd`, press Enter):
@@ -64,7 +88,7 @@ The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secre
 ## Setting it up from scratch
 
 1. Discord Developer Portal → New Application. Copy the **Application ID** and **Public Key** into `wrangler.toml`. On **Bot**, Reset Token and keep it.
-2. Invite it: `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=19456` (View Channels, Send Messages and Embed Links. It only deletes its own posts, which needs nothing more).
+2. Invite it: `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=268454912` (View Channels, Send Messages, Embed Links and Manage Roles, for the rank roles. It only deletes its own posts, which needs nothing more). On **Bot**, turn on **Server Members Intent**.
 3. `npx wrangler login`, `npx wrangler d1 create genjiball-discord-bot` (paste the id into `wrangler.toml`), `npm run db:setup`, `npx wrangler secret put DISCORD_TOKEN`, `npm run deploy`.
 4. Developer Portal → General Information → **Interactions Endpoint URL**: the address `deploy` printed, plus `/interactions`. Save.
 5. `npm run register`.

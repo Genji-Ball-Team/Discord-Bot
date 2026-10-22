@@ -15,7 +15,7 @@ export async function autocompletePlayers(site, text, regionValue) {
 }
 
 /** The autocomplete sends a player id; a typed name is searched. */
-async function resolvePlayer(site, value, region) {
+export async function resolvePlayer(site, value, region) {
   const text = String(value ?? "").trim();
   if (/^\d+$/.test(text)) return Number(text);
   if (text.length < 2) return null;

@@ -1,15 +1,16 @@
 // The Worker: Discord sends every slash command and button press to /interactions, and the cron
 // runs every minute: tournament DMs and lists, the site's new tourneys, tournament results, the
-// live leaderboards.
+// live leaderboards, the rank roles. genjiball.us reads who has a title from `GET /titles`.
 //
 // All commands are under /gr. Everyone can use /gr stats; the rest is for Staff (STAFF_ROLE_ID, or
 // server admins).
 
 import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
+import { link, linkedUsers, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
 import { postResults } from "./results.js";
 import { Site } from "./site.js";
-import { autocompletePlayers, renderStats } from "./stats.js";
+import { autocompletePlayers, renderStats, resolvePlayer } from "./stats.js";
 import { minutes } from "./time.js";
 import { callsSite, confirmButton, parseTourneyButton, runTournaments, signup, syncTourneys, tourneyMinutes } from "./tournament.js";
 
@@ -37,6 +38,8 @@ export function optionsOf(data) {
 }
 
 const refreshMinutes = (env) => minutes(env.LEADERBOARD_REFRESH_MINUTES);
+/** What every leaderboard render needs from here: linked members, for the titles' @mentions. */
+const boardOptions = (env, extra = {}) => ({ linked: (ids) => linkedUsers(env, ids), ...extra });
 
 const ADMINISTRATOR = 1n << 3n;
 
@@ -52,7 +55,7 @@ export function isStaff(env, member) {
 }
 
 async function setupLeaderboard(env, discord, site, interaction, channelId) {
-  const { message } = await renderLeaderboard(site, "eu", 1, { live: true, refreshMinutes: refreshMinutes(env) });
+  const { message } = await renderLeaderboard(site, "eu", 1, boardOptions(env, { live: true, refreshMinutes: refreshMinutes(env) }));
   const existing = await env.DB.prepare("SELECT message_id FROM boards WHERE channel_id = ?").bind(channelId).first();
   let messageId = null;
   if (existing) {
@@ -119,11 +122,21 @@ async function handleCommand(env, ctx, interaction) {
 
   switch (command) {
     case "leaderboard":
-      return deferred(ctx, discord, interaction, async () => (await renderLeaderboard(site, options.region, options.page)).message);
+      return deferred(ctx, discord, interaction, async () => (await renderLeaderboard(site, options.region, options.page, boardOptions(env))).message);
     case "setup leaderboard":
       return deferred(ctx, discord, interaction, () => setupLeaderboard(env, discord, site, interaction, options.channel ?? interaction.channel_id), {
         ephemeral: true,
       });
+    case "link":
+    case "unlink": {
+      // The member as the command resolved it: their roles, without asking Discord again.
+      const member = { userId: options.user, has: interaction.data.resolved?.members?.[options.user]?.roles ?? [] };
+      const work =
+        command === "link"
+          ? async () => link(env, discord, site, { ...member, playerId: await resolvePlayer(site, options.player) })
+          : () => unlink(env, discord, member);
+      return deferred(ctx, discord, interaction, work, { ephemeral: true });
+    }
     default:
       return privateReply("I don't know that command.");
   }
@@ -147,7 +160,7 @@ async function handleButton(env, ctx, interaction) {
   ctx.waitUntil(
     (async () => {
       try {
-        const { message } = await renderLeaderboard(site, target.region, target.page);
+        const { message } = await renderLeaderboard(site, target.region, target.page, boardOptions(env));
         await discord.editOriginal(interaction.token, message);
       } catch (e) {
         if (live) await failSoftly(discord, interaction.token, e);
@@ -194,7 +207,7 @@ async function refreshBoards(env, discord, site, budget) {
   for (const b of results) {
     if (budget() < 4) return;
     try {
-      const { message } = await renderLeaderboard(site, "eu", 1, { live: true, refreshMinutes: refreshMinutes(env) });
+      const { message } = await renderLeaderboard(site, "eu", 1, boardOptions(env, { live: true, refreshMinutes: refreshMinutes(env) }));
       await discord.editMessage(b.channel_id, b.message_id, message);
       await env.DB.prepare("UPDATE boards SET refreshed_at = ? WHERE channel_id = ?").bind(Date.now(), b.channel_id).run();
     } catch (e) {
@@ -210,6 +223,8 @@ export default {
     if (request.method === "GET" && url.pathname === "/") {
       return new Response("Genji Ball bot is running. Discord talks to it at /interactions.");
     }
+    // Who has a title (God, Demigod), for genjiball.us's leaderboard (src/ranks.js). Public: the site shows it anyway.
+    if (request.method === "GET" && url.pathname === "/titles") return json(await listTitles(env));
     if (request.method !== "POST" || (url.pathname !== "/interactions" && url.pathname !== "/")) {
       return new Response("Not found", { status: 404 });
     }
@@ -250,6 +265,10 @@ export default {
     }
     if (minute % refreshMinutes(env) === 0) {
       await refreshBoards(env, discord, site, budget).catch((e) => console.error("boards", e));
+    }
+    // Rank roles, out of step with the rest, or the next minute when the last check ran out of budget.
+    if (minute % rankMinutes(env) === 4 % rankMinutes(env) || (await ranksPending(env))) {
+      await runRanks(env, discord, site, budget, now).catch((e) => console.error("ranks", e));
     }
   },
 };

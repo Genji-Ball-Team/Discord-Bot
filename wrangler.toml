@@ -43,5 +43,20 @@ CONFIRM_MINUTES = "5"
 # How often the live leaderboard (/gr setup leaderboard) updates, in minutes (1–60).
 LEADERBOARD_REFRESH_MINUTES = "5"
 
+# Rank roles (/gr link, src/ranks.js): each linked member gets the role of their tier, the higher
+# of their EU and NA ones. Tier=role id, lowest tier first, the tiers named as on genjiball.us.
+# Empty: no rank roles. The bot's role needs Manage Roles and must be above all of these.
+RANK_ROLES = "Apprentice=1512568373874131005, Master=1512568905141452891, Grandmaster=1512570350150484099, Ascendant=1512569701279072346, Champion=1512569083004977203, Sovereign=1519536470493364254"
+# Linked members below the first tier, or not rated yet.
+UNRANKED_ROLE_ID = "1535428239051456573"
+# The titles (the 1v1 tourney's God and Demigod), region=role id. Staff give these; the bot reads them
+# for the site's and /gr leaderboard's lists. Only linked members count.
+GOD_ROLE_IDS = "eu=1562890489038897202, na=1562890528922804319"
+DEMIGOD_ROLE_IDS = "eu=1562890585021612052, na=1562890626087780473"
+# Where a climb to a higher tier is posted ("**Name** has ranked up to **Champion** 🏆"). Empty: not posted.
+RANKUP_CHANNEL_ID = "1535559725209616434"
+# How often the rank roles are checked, in minutes (1–60).
+RANK_REFRESH_MINUTES = "5"
+
 # The bot token is a secret: `npx wrangler secret put DISCORD_TOKEN`, never here. So is SITE_TOKEN
 # (`npx wrangler secret put SITE_TOKEN`): genjiball.us's BOT_TOKEN, for the tourney sign-ups.
