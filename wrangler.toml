@@ -1,6 +1,8 @@
 name = "genjiball-discord-bot"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
+# The Genji Ball Cloudflare account (same as genjiball.us). Pinned so a deploy can never go to a personal account.
+account_id = "c212ad20cc4f4b5382766735f57b91c3"
 
 # Every minute: tournament confirm DMs and lists. Then, by the minute: every TOURNEY_REFRESH_MINUTES the
 # site's new or changed tourneys; every 5 the tournament match results; every LEADERBOARD_REFRESH_MINUTES
