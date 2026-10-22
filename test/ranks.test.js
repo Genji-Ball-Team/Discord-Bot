@@ -7,9 +7,9 @@ import { link, rankOf, runRanks, unlink } from "../src/ranks.js";
 import { Site } from "../src/site.js";
 import { ENV, fakeD1, installFetch } from "./helpers.js";
 
-// Role ids: tiers 11–16 lowest first, Unranked 10, titles 20–23, another role 99.
+// Role ids: Rookie 17, then tiers 11–16 lowest first, Unranked 10, titles 20–23, another role 99.
 const ROLES = {
-  RANK_ROLES: "Apprentice=11, Master=12, Grandmaster=13, Ascendant=14, Champion=15, Sovereign=16",
+  RANK_ROLES: "Rookie=17, Apprentice=11, Master=12, Grandmaster=13, Ascendant=14, Champion=15, Sovereign=16",
   UNRANKED_ROLE_ID: "10",
   GOD_ROLE_IDS: "eu=20, na=21",
   DEMIGOD_ROLE_IDS: "eu=22, na=23",
@@ -39,6 +39,9 @@ test("a player's rank is their higher tier of EU and NA", () => {
   assert.equal(rankOf(e, rated(1, "A", { eu: null, na: "Master" })), "Master");
   assert.equal(rankOf(e, rated(1, "A", { eu: null })), "");
   assert.equal(rankOf(e, rated(1, "A", {})), "");
+  // Rookie is in `siteTier` only (the game has no Rookie tag, so `tier` is null).
+  const rookie = { playerId: 1, name: "A", regions: { eu: { tier: null, siteTier: { label: "Rookie" } }, na: { tier: null, siteTier: null } } };
+  assert.equal(rankOf(e, rookie), "Rookie");
 });
 
 test("/gr link gives the rank role at once; one player per member and one member per player", async () => {

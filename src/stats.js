@@ -1,14 +1,14 @@
 // /gr stats: one player's rating and stats from the site, and the name autocomplete.
 
 import { NO_PINGS } from "./discord.js";
-import { REGIONS, escapeMarkdown, regionOf, tierColor } from "./site.js";
+import { REGIONS, escapeMarkdown, regionOf, shownTier, tierColor } from "./site.js";
 
 export async function autocompletePlayers(site, text, regionValue) {
   const query = (text ?? "").trim();
   if (query.length < 2) return [];
   const data = await site.search(query, regionValue ? regionOf(regionValue) : undefined).catch(() => null);
   return (data?.players ?? []).slice(0, 25).map((p) => {
-    const rating = p.rating === null || p.rating === undefined ? "unrated" : `${Math.round(p.rating)}${p.tier ? ` ${p.tier.label}` : ""}`;
+    const rating = p.rating === null || p.rating === undefined ? "unrated" : `${Math.round(p.rating)}${shownTier(p) ? ` ${shownTier(p).label}` : ""}`;
     const alias = p.matchedAlias ? ` (was ${p.matchedAlias})` : "";
     return { name: `${p.name}${alias} · ${rating}`.slice(0, 100), value: String(p.id) };
   });
@@ -49,7 +49,7 @@ export async function renderStats(site, playerValue, regionValue) {
   const fields = [];
   if (r) {
     fields.push(
-      { name: "Rating", value: `**${num(r.rating)}**${r.tier ? ` · ${r.tier.label}` : ""}`, inline: true },
+      { name: "Rating", value: `**${num(r.rating)}**${shownTier(r) ? ` · ${shownTier(r).label}` : ""}`, inline: true },
       { name: "Rank", value: r.rank ? `#${r.rank}` : "Unranked", inline: true },
       { name: "Next tier", value: r.nextTier ? `${r.nextTier.label} in ${num(r.nextTier.threshold - r.rating)}` : "Top tier", inline: true },
       { name: "Rounds", value: num(r.rounds), inline: true },
@@ -89,7 +89,7 @@ export async function renderStats(site, playerValue, regionValue) {
         title: `${p.name} — ${info.label}`,
         url: site.playerUrl(p.id, region),
         description: aliases.length ? `Also known as ${aliases.map((a) => `\`${a}\``).join(", ")}` : undefined,
-        color: tierColor(r?.tier),
+        color: tierColor(shownTier(r)),
         fields,
         footer: { text: r?.inactiveSince ? "Inactive · genjiball.us" : "genjiball.us" },
       },

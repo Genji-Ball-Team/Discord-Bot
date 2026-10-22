@@ -46,7 +46,7 @@ LEADERBOARD_REFRESH_MINUTES = "5"
 # Rank roles (/gr link, src/ranks.js): each linked member gets the role of their tier, the higher
 # of their EU and NA ones. Tier=role id, lowest tier first, the tiers named as on genjiball.us.
 # Empty: no rank roles. The bot's role needs Manage Roles and must be above all of these.
-RANK_ROLES = "Apprentice=1512568373874131005, Master=1512568905141452891, Grandmaster=1512570350150484099, Ascendant=1512569701279072346, Champion=1512569083004977203, Sovereign=1519536470493364254"
+RANK_ROLES = "Rookie=1512569986361589930, Apprentice=1512568373874131005, Master=1512568905141452891, Grandmaster=1512570350150484099, Ascendant=1512569701279072346, Champion=1512569083004977203, Sovereign=1519536470493364254"
 # Linked members below the first tier, or not rated yet.
 UNRANKED_ROLE_ID = "1535428239051456573"
 # The titles (the 1v1 tourney's God and Demigod), region=role id. Staff give these; the bot reads them
