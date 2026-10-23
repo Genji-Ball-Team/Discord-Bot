@@ -12,7 +12,7 @@ Everything is under **`/gr`**.
 | `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard. Its buttons flip that message. |
 | `/gr link user player` | Staff | Links a member to their genjiball.us player (names autocomplete) and gives them their **rank role** at once. See [Rank roles](#rank-roles). |
 | `/gr unlink user` | Staff | Removes the link and puts them back on Unranked. |
-| `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 15, updated every 5 minutes, EU/NA and pages up to the top 75). Its buttons open a private copy, so the channel's board stays the same for everyone. |
+| `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 20, updated every 5 minutes, EU/NA and 5 pages of 20, up to the top 100). Its buttons open a private copy, so the channel's board stays the same for everyone. |
 
 "Staff" means the role in `STAFF_ROLE_ID`, plus server admins. Anyone else gets "Only Staff can use this".
 
