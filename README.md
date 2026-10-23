@@ -66,7 +66,7 @@ It needs two things in Discord: **Server Members Intent** on (Developer Portal â
 
 The 1v1 tourney's winner is **God** and the runner-up **Demigod** (at most 1 and 3 per region). They're titles, not ranks: Staff give the roles in `GOD_ROLE_IDS` and `DEMIGOD_ROLE_IDS` by hand, one per region, and the player keeps their rank role too. The bot only reads them, for linked members, at each check:
 
-- `/gr leaderboard` and the live leaderboard list them above everyone on page 1 (God, then Demigod) with their Elo and their @mention, which Discord colours with their role and which pings nobody. The rest are numbered from 1 without them.
+- `/gr leaderboard` and the live leaderboard list them above everyone on page 1 (God, then Demigod), one line each with a `GOD` or `DEM` box where the list has its place numbers, with their Elo and their @mention, which Discord colours with their role and which pings nobody. The rest are numbered from 1 without them.
 - genjiball.us shows them the same way on its leaderboard (God white, Demigod dark red): it reads them from the bot's `GET /titles` (genjiball-ranked `src/site/titles.ts`).
 - The game doesn't change: its top 10 and rank tags stay the real ratings.
 
