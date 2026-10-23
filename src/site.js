@@ -25,19 +25,38 @@ class SiteError extends Error {
   }
 }
 
+/** SITE_TIMEOUT_SECONDS: how long a site request may take before it counts as the site failing. */
+export const siteTimeoutMs = (env) => Math.min(30, Math.max(1, Number(env.SITE_TIMEOUT_SECONDS) || 5)) * 1000;
+
+/** Autocomplete has to answer Discord within 3 seconds, the site's answer included. */
+export const AUTOCOMPLETE_TIMEOUT_MS = 2000;
+
 export class Site {
-  constructor(env) {
+  /** `timeoutMs`: the limit for each request, SITE_TIMEOUT_SECONDS if left out. */
+  constructor(env, { timeoutMs = siteTimeoutMs(env) } = {}) {
     this.base = (env.SITE_URL ?? "https://genjiball.us").replace(/\/+$/, "");
     this.token = setting(env, "SITE_TOKEN");
+    this.timeoutMs = timeoutMs;
     this.calls = 0;
+  }
+
+  /** A slow site is a failing one: the callers' error paths handle it. */
+  async request(url, init, what) {
+    this.calls++;
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
+    } catch (e) {
+      if (e?.name === "TimeoutError") throw new SiteError(0, `The site didn't answer ${what} within ${this.timeoutMs / 1000} s`);
+      throw e;
+    }
   }
 
   /** A call to the bot's routes. A 404 or 409 is an answer (`{ status, error }`), not an error. */
   async bot(method, path, body) {
-    this.calls++;
     const headers = { Accept: "application/json", Authorization: `Bearer ${this.token}` };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    const res = await fetch(this.base + "/api/bot" + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const init = { method, headers, body: body === undefined ? undefined : JSON.stringify(body) };
+    const res = await this.request(this.base + "/api/bot" + path, init, `for ${method} /api/bot${path}`);
     const data = await res.json().catch(() => null);
     if (res.ok || res.status === 404 || res.status === 409) return { status: res.status, ...data };
     throw new SiteError(res.status, `The site answered ${res.status} for ${method} /api/bot${path}`);
@@ -60,8 +79,7 @@ export class Site {
   async get(path, params = {}) {
     const url = new URL(this.base + path);
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
-    this.calls++;
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const res = await this.request(url, { headers: { Accept: "application/json" } }, `for ${path}`);
     if (res.status === 404) return null;
     if (!res.ok) throw new SiteError(res.status, `The site answered ${res.status} for ${path}`);
     return res.json();

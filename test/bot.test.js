@@ -8,6 +8,7 @@ import { Site } from "../src/site.js";
 import { Discord } from "../src/discord.js";
 import { listMessages, runTournaments, signup } from "../src/tournament.js";
 import { resultsPost } from "../src/results.js";
+import { autocompletePlayers } from "../src/stats.js";
 import { minutes } from "../src/time.js";
 import { ENV, STAFF, fakeBrowser, fakeCtx, fakeD1, installFetch } from "./helpers.js";
 
@@ -23,7 +24,8 @@ function env(extra = {}) {
 
 async function send(e, interaction) {
   const body = JSON.stringify({ token: "itoken", channel_id: "chan1", guild_id: "guild1", ...interaction });
-  const timestamp = "1700000000";
+  // Signed now: the bot refuses a request signed long ago.
+  const timestamp = String(Math.floor(clock / 1000));
   const signature = sign(null, Buffer.from(timestamp + body), privateKey).toString("hex");
   const request = new Request("https://bot.example/interactions", {
     method: "POST",
@@ -802,4 +804,78 @@ test("leaderboard: EU default, NA tab, the full leaderboard's link instead of pa
 test("unsigned requests are refused", async () => {
   const res = await worker.fetch(new Request("https://bot.example/interactions", { method: "POST", body: "{}" }), env(), fakeCtx());
   assert.equal(res.status, 401);
+});
+
+test("a request signed long ago is refused", async () => {
+  const body = JSON.stringify({ type: 1 });
+  const timestamp = String(Math.floor(Date.now() / 1000) - 10 * 60);
+  const signature = sign(null, Buffer.from(timestamp + body), privateKey).toString("hex");
+  const request = new Request("https://bot.example/interactions", {
+    method: "POST",
+    headers: { "X-Signature-Ed25519": signature, "X-Signature-Timestamp": timestamp },
+    body,
+  });
+  const res = await worker.fetch(request, { ...ENV, DISCORD_PUBLIC_KEY: PUBLIC_KEY_HEX, DB: fakeD1() }, fakeCtx());
+  assert.equal(res.status, 401);
+});
+
+// ---------- slow or busy APIs ----------
+
+/** A fetch that never answers: it only ends when the request's signal gives up. */
+function hangingFetch() {
+  globalThis.fetch = (input, init) =>
+    new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
+}
+
+test("a site that doesn't answer in time fails like a site error, and autocomplete shows nothing", async () => {
+  hangingFetch();
+  const site = new Site(ENV, { timeoutMs: 20 });
+  await assert.rejects(site.get("/api/players/1"), /didn't answer for \/api\/players\/1 within 0.02 s/);
+  assert.deepEqual(await autocompletePlayers(site, "Fealthy"), []);
+  assert.equal(new Site({ ...ENV, SITE_TIMEOUT_SECONDS: "8" }).timeoutMs, 8000);
+  assert.equal(new Site(ENV).timeoutMs, 5000);
+});
+
+/** Discord answering each call with the next of `answers` (`{ status, body, headers }`), then 200. */
+function discordAnswers(answers) {
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    calls.push({ method: init.method, url: String(input) });
+    const a = answers.shift() ?? { status: 200, body: { id: "1" } };
+    return new Response(JSON.stringify(a.body ?? {}), { status: a.status, headers: { "Content-Type": "application/json", ...a.headers } });
+  };
+  return calls;
+}
+
+test("a rate limit longer than the bot waits is thrown at once, not retried too early", async () => {
+  const calls = discordAnswers([{ status: 429, body: { message: "You are being rate limited.", retry_after: 30 } }]);
+  const discord = new Discord(ENV, 10);
+  await assert.rejects(discord.sendMessage("chan1", { content: "hi" }), (e) => e.status === 429);
+  assert.equal(calls.length, 1);
+  // A route's limit: the run goes on with other calls.
+  assert.equal(discord.left, 9);
+});
+
+test("the Retry-After header counts when the body has no retry_after", async () => {
+  const calls = discordAnswers([{ status: 429, body: {}, headers: { "Retry-After": "60" } }]);
+  await assert.rejects(new Discord(ENV).sendMessage("chan1", { content: "hi" }), (e) => e.status === 429);
+  assert.equal(calls.length, 1);
+});
+
+test("a global rate limit stops the rest of the run after its retry", async () => {
+  const calls = discordAnswers([{ status: 429, body: { retry_after: 0, global: true } }]);
+  const discord = new Discord(ENV, 10);
+  assert.deepEqual(await discord.sendMessage("chan1", { content: "hi" }), { id: "1" });
+  assert.equal(calls.length, 2);
+  assert.equal(discord.left, 0);
+  await assert.rejects(discord.sendMessage("chan1", { content: "again" }), /out of request budget/);
+});
+
+test("Discord briefly down: an edit is retried once, a new message isn't (it may have been posted)", async () => {
+  let calls = discordAnswers([{ status: 503 }]);
+  assert.deepEqual(await new Discord(ENV).editMessage("chan1", "m1", { content: "hi" }), { id: "1" });
+  assert.equal(calls.length, 2);
+  calls = discordAnswers([{ status: 503 }]);
+  await assert.rejects(new Discord(ENV).sendMessage("chan1", { content: "hi" }), (e) => e.status === 503);
+  assert.equal(calls.length, 1);
 });

@@ -28,7 +28,8 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 
 - **Outgoing requests.** A Worker run on the free plan makes at most 50 requests. The cron's `Discord` client gets a budget (`new Discord(env, 45)`) and counts site requests too: cron work checks what's left before each step and carries on in the next minute rather than running out halfway.
 - **genjiball-ranked's D1 is on the free tier too.** Each site request costs it reads, and some are expensive (a player search reads every alias, `/gr stats` reads every rated round). Don't call the site more than needed: render once and reuse, and cache what autocomplete and repeated commands ask for.
-- **Discord rate limits.** `Discord.call` retries a 429 once. Bulk work (DMs) is spread over cron runs.
+- **Timeouts.** Every site request has a time limit (`SITE_TIMEOUT_SECONDS`, 2 s for autocomplete) and every Discord one 10 s. A timeout is an error like any other: the same error paths handle it.
+- **Discord rate limits.** `Discord.call` retries a 429 once, when the wait is 5 s or less; a longer one is thrown, and the cron carries on next minute. A global limit ends the run's requests. A 502–504 is retried once, except a POST (it may have gone through). Bulk work (DMs) is spread over cron runs.
 
 ## Discord habits
 

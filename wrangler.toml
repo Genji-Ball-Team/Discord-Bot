@@ -32,6 +32,9 @@ DISCORD_GUILD_ID = "1110543205482627102"
 
 # The website the bot reads. With the SITE_TOKEN secret it also signs players up for its tourneys.
 SITE_URL = "https://genjiball.us"
+# How long a site request may take, in seconds (1–30), before it counts as the site failing.
+# Autocomplete waits at most 2: Discord wants its answer within 3.
+SITE_TIMEOUT_SECONDS = "5"
 
 # Staff: members with this role (and server admins) can use everything but /gr stats.
 # Right-click the role → Copy Role ID (needs Developer Mode on).

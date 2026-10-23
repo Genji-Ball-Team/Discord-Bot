@@ -118,6 +118,7 @@ Settings are `[vars]` in `wrangler.toml` (each has a comment there). Empty means
 |---|---|
 | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_GUILD_ID` | The app, and the server `npm run register` puts the commands in |
 | `SITE_URL` | The website the bot reads (genjiball.us) |
+| `SITE_TIMEOUT_SECONDS` | How long a site request may take (1 to 30, 5 if missing; autocomplete waits at most 2) |
 | `STAFF_ROLE_ID` | The Staff role |
 | `TOURNEY_CHANNEL_ID` | Sign-up posts and lists |
 | `RESULTS_CHANNEL_ID` | Tournament match results |

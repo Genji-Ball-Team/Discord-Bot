@@ -32,13 +32,17 @@ function hexToBytes(hex) {
   return bytes;
 }
 
-/** Discord signs every request with the app's key. Anything unsigned is refused. */
-export async function verifyRequest(request, publicKey) {
+/** How far a request's signed time may be from now, so an old signed request can't be sent again. */
+const SIGNATURE_MAX_AGE_MS = 5 * 60 * 1000;
+
+/** Discord signs every request with the app's key. Anything unsigned, or signed too long ago, is refused. */
+export async function verifyRequest(request, publicKey, nowMs = Date.now()) {
   const signature = hexToBytes(request.headers.get("X-Signature-Ed25519") ?? "");
   const timestamp = request.headers.get("X-Signature-Timestamp");
   const keyBytes = hexToBytes(publicKey ?? "");
   const body = await request.text();
   if (!signature || !timestamp || !keyBytes) return { ok: false, body };
+  if (!(Math.abs(nowMs - Number(timestamp) * 1000) <= SIGNATURE_MAX_AGE_MS)) return { ok: false, body };
   try {
     const key = await crypto.subtle.importKey("raw", keyBytes, { name: "Ed25519" }, false, ["verify"]);
     const ok = await crypto.subtle.verify("Ed25519", key, signature, new TextEncoder().encode(timestamp + body));
@@ -58,6 +62,40 @@ class DiscordError extends Error {
 /** The channel or message is gone, or the bot can't see it any more. */
 export const lostAccess = (e) => e instanceof DiscordError && (e.status === 403 || e.status === 404);
 
+/** Longest wait before a retry, in seconds. */
+const MAX_RETRY_WAIT = 5;
+/** Discord briefly down: worth one retry, unless the request may have gone through (a POST could post twice). */
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_METHODS = new Set(["GET", "PUT", "PATCH", "DELETE"]);
+/** A request still unanswered after this counts as failed. */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+const sleep = (seconds) => new Promise((r) => setTimeout(r, seconds * 1000));
+
+/** Seconds Discord asks to wait: the body's `retry_after` (it has decimals), else the Retry-After header. */
+function retryAfter(res, info) {
+  const seconds = Number(info?.retry_after ?? res.headers.get("Retry-After") ?? NaN);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : 1;
+}
+
+async function send(token, method, path, body, auth) {
+  // A file upload is multipart: fetch sets its Content-Type, boundary included.
+  const form = body instanceof FormData;
+  const headers = form ? {} : { "Content-Type": "application/json" };
+  if (auth) headers.Authorization = `Bot ${token}`;
+  try {
+    return await fetch(API + path, {
+      method,
+      headers,
+      body: body === undefined || form ? body : JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    if (e?.name === "TimeoutError") throw new DiscordError(0, `no answer to ${method} ${path} within ${REQUEST_TIMEOUT_MS / 1000} s`);
+    throw e;
+  }
+}
+
 export class Discord {
   /** `budget`: most requests this run may make (the free plan allows 50 subrequests a run). */
   constructor(env, budget = Infinity) {
@@ -72,18 +110,26 @@ export class Discord {
   }
 
   async call(method, path, body, { auth = true } = {}) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; ; attempt++) {
       if (this.used >= this.budget) throw new DiscordError(0, "out of request budget for this run");
       this.used++;
-      // A file upload is multipart: fetch sets its Content-Type, boundary included.
-      const form = body instanceof FormData;
-      const headers = form ? {} : { "Content-Type": "application/json" };
-      if (auth) headers.Authorization = `Bot ${this.token}`;
-      const res = await fetch(API + path, { method, headers, body: body === undefined || form ? body : JSON.stringify(body) });
-      if (res.status === 429 && attempt === 0) {
+      const res = await send(this.token, method, path, body, auth);
+      const retry = attempt === 0;
+      if (res.status === 429) {
         const info = await res.json().catch(() => ({}));
-        const wait = Math.min(Number(info.retry_after ?? 1), 5);
-        await new Promise((r) => setTimeout(r, wait * 1000));
+        const wait = retryAfter(res, info);
+        const global = info.global === true || res.headers.get("X-RateLimit-Scope") === "global";
+        console.warn(`Discord rate limit${global ? " (global)" : ""} on ${method} ${path}: wait ${wait} s`);
+        // A longer wait than this is left to the next cron run (or the user's next try).
+        const again = retry && wait <= MAX_RETRY_WAIT;
+        // A global limit holds every route: this run makes no more requests after the retry.
+        if (global) this.budget = this.used + (again ? 1 : 0);
+        if (!again) throw new DiscordError(429, info.message ?? "rate limited");
+        await sleep(wait);
+        continue;
+      }
+      if (RETRY_STATUSES.has(res.status) && RETRY_METHODS.has(method) && retry) {
+        await sleep(1);
         continue;
       }
       if (res.status === 204) return null;

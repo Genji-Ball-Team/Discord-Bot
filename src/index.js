@@ -9,7 +9,7 @@ import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, lostAccess
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { link, linkedUsers, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
 import { postResults } from "./results.js";
-import { Site } from "./site.js";
+import { AUTOCOMPLETE_TIMEOUT_MS, Site } from "./site.js";
 import { autocompletePlayers, renderStats, resolvePlayer } from "./stats.js";
 import { minutes, setting } from "./time.js";
 import { callsSite, confirmButton, parseTourneyButton, postTourneyResults, runTournaments, signup, syncTourneys, tourneyMinutes } from "./tournament.js";
@@ -203,7 +203,7 @@ function handleForm(env, ctx, interaction) {
 async function handleAutocomplete(env, interaction) {
   const { focused, options } = optionsOf(interaction.data);
   let choices = [];
-  if (focused?.name === "player") choices = await autocompletePlayers(new Site(env), focused.value, options.region);
+  if (focused?.name === "player") choices = await autocompletePlayers(new Site(env, { timeoutMs: AUTOCOMPLETE_TIMEOUT_MS }), focused.value, options.region);
   return json({ type: ResponseType.AUTOCOMPLETE, data: { choices } });
 }
 
