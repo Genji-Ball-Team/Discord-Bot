@@ -162,7 +162,8 @@ test("a tourney made on the site, from its sign-up post to the final list", asyn
     ["🌍 Region", "🇪🇺 EU"],
     ["👥 Signed up", "**0**"],
   ]);
-  assert.deepEqual(post.body.components[0].components.map((b) => b.label), ["Register", "Unregister", "Who's in"]);
+  assert.deepEqual(post.body.components[0].components.map((b) => b.label), ["Register", "Unregister", "Player list"]);
+  assert.equal(post.body.components[0].components[1].style, 4); // red
   assert.equal(post.body.components[0].components[0].style, 3); // green
   // Registering stays open until the start (and confirms at once in the last minutes).
   assert.equal(post.body.embeds[0].footer.text, `Times are in your own time zone · Tournament #${id}`);
