@@ -41,16 +41,17 @@ export function withoutTitled(players, titled) {
   return players.filter((p) => !ids.has(p.id)).map((p) => ({ ...p, rank: p.rank - titled.filter((t) => t.rank < p.rank).length }));
 }
 
+/** The title's box, in place of a place number, so the titled players line up with the list. */
+const TITLE_BADGES = { God: "GOD", Demigod: "DEM" };
+
 /** God, then the Demigods: their linked member (coloured by their role, pinging nobody) or name, and rating. */
 function titleLines(titled, users) {
-  const lines = [];
-  for (const t of titled) {
-    if (t.title !== lines.at(-1)?.title) lines.push({ title: t.title, text: `**${t.title}**` });
+  return titled.map((t) => {
+    const badge = "`" + (TITLE_BADGES[t.title] ?? t.title.slice(0, 3).toUpperCase()) + "`";
     const user = users.get(t.id);
     const who = user ? `<@${user}> (${escapeMarkdown(t.name)})` : `**${escapeMarkdown(t.name)}**`;
-    lines.push({ title: t.title, text: `${who} · **${Math.round(t.rating)} Elo**` });
-  }
-  return lines.map((l) => l.text);
+    return `${badge} ${who} · **${Math.round(t.rating)} Elo**`;
+  });
 }
 
 /**
