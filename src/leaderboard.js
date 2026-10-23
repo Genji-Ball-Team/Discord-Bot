@@ -1,11 +1,11 @@
-// The leaderboard message: 15 players a page, up to page 5 (top 75), EU and NA tabs. The region's God
+// The leaderboard message: 20 players a page, up to page 5 (top 100), EU and NA tabs. The region's God
 // and Demigod (the 1v1 tourney's titles, src/ranks.js) are listed above everyone on page 1, without a
 // place, and the rest are numbered from 1 without them, as on the site.
 
 import { NO_PINGS, EMBED_COLOR } from "./discord.js";
 import { REGIONS, escapeMarkdown, regionOf, shownTier } from "./site.js";
 
-export const PAGE_SIZE = 15;
+export const PAGE_SIZE = 20;
 export const MAX_PAGES = 5;
 const API_PAGE_SIZE = 50;
 
@@ -74,7 +74,7 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
   const lines = players.length ? formatLines(players) : top.length ? [] : [page === 1 ? "Nobody is ranked here yet." : "No players on this page yet."];
   const description = [top.join("\n"), lines.join("\n")].filter(Boolean).join("\n\n");
   const embed = {
-    title: `${info.label} Leaderboard — Top ${to}`,
+    title: `🏆 ${info.label} Leaderboard — Top ${to}`,
     url: site.leaderboardUrl(region),
     description,
     color: EMBED_COLOR,

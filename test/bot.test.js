@@ -734,11 +734,12 @@ test("a busy feed is read a page at a time and nothing is skipped", async () => 
 test("leaderboard: EU default, NA tab, pages up to 5", async () => {
   installFetch();
   const { message } = await renderLeaderboard(new Site(ENV), undefined, undefined);
-  assert.match(message.embeds[0].title, /EU Leaderboard — Top 15/);
+  assert.equal(message.embeds[0].title, "🏆 EU Leaderboard — Top 20");
+  assert.equal(message.embeds[0].description.split("\n").length, 20);
   assert.match(message.embeds[0].description, /\*\*Fealthy\*\* — Grandmaster · \*\*2000 Elo\*\*/);
   assert.deepEqual(parseButton("lb:n:na:2"), { region: "na", page: 2 });
   const five = await renderLeaderboard(new Site(ENV), "na", 9);
-  assert.match(five.message.embeds[0].title, /NA Leaderboard — Top 75/);
+  assert.match(five.message.embeds[0].title, /NA Leaderboard — Top 100/);
   assert.equal(five.message.components[1].components[2].disabled, true);
 });
 
