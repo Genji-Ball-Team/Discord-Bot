@@ -12,6 +12,11 @@ binding = "DB"
 database_name = "genjiball-discord-bot"
 database_id = "436cac8d-7325-44c7-9d83-cb22cbe17e86"
 
+# Cloudflare's browser: a picture of each finished tourney's page for RESULTS_CHANNEL_ID
+# (src/screenshot.js). Needs a compatibility_date of 2026-03-24 or later.
+[browser]
+binding = "BROWSER"
+
 [vars]
 # From the Discord Developer Portal, "General Information" page of your app.
 DISCORD_APPLICATION_ID = "1556986418239115295"
@@ -31,7 +36,8 @@ STAFF_ROLE_ID = "1199414765055901737"
 # Empty: no tourney posts.
 TOURNEY_CHANNEL_ID = "1548176545770901514"
 
-# Where tournament match results (wins, kills, rating changes) are posted. Empty: none.
+# Where tournament match results (wins, kills, rating changes) are posted, and a picture of each
+# finished tourney's page with its link. Empty: none.
 RESULTS_CHANNEL_ID = "1548176572110868551"
 
 # How often the bot looks for new, renamed, moved or cancelled tourneys on the site, in minutes (1–60).
