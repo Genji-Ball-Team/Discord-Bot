@@ -9,8 +9,8 @@ The Discord bot for the Genji Ball Ranked server: one Cloudflare Worker (plain J
 | `npm ci` | Install |
 | `npm test` | The tests (`node --test`, Node 22.5 or newer). What CI runs. **It must pass before a change is done.** |
 | `npm run register` | Send `scripts/commands.js` to Discord. Needed after changing a command's name or options |
-| `npm run deploy` | Deploy the Worker |
-| `npm run db:setup` | Run `schema.sql` on the live database |
+| `npm run deploy` | Apply the new migrations to the live database, then deploy the Worker |
+| `npm run db:migrate:local` / `db:migrate:remote` | Apply the migrations to the local / live database only |
 
 The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs behind `fetch` (`test/helpers.js`). They can't open Discord: a PR says what was tried with the real bot.
 
@@ -41,11 +41,12 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 
 - Settings are `[vars]` in `wrangler.toml`, read through a small helper with a default. The bot token (`DISCORD_TOKEN`) and the site's (`SITE_TOKEN`) are `wrangler secret`s, never in the repo.
 - Every setting, secret, route and table is listed in the README ("Settings and data"): keep it in step.
-- The schema is `schema.sql`, run on the live database with `npm run db:setup`. It must stay safe to run again: `CREATE TABLE IF NOT EXISTS`. A change to an existing table is a new `ALTER TABLE` statement run by hand on the live database; say so in the PR.
+- The schema is the D1 migrations in `migrations/` (`0001_initial.sql`, ...), applied by `npm run deploy` before the Worker goes out, like genjiball-ranked. The tests build their database from the same files.
+- **A schema change** is a new file, `migrations/NNNN_what.sql` (next number, plain `CREATE TABLE` / `ALTER TABLE ... ADD COLUMN`). **Never edit a migration that was merged**: production has already run it. A migration can't be undone by rolling the Worker back, so keep it compatible with the previous code. Update the table list in the README, and say in the PR what the migration does.
 
 ## Deploying
 
-Deploy only to the Genji Ball Cloudflare account, the one genjiball.us is on: check `npx wrangler whoami` first, never a personal account. After a change to `scripts/commands.js`, also `npm run register`.
+Deploy only to the Genji Ball Cloudflare account, the one genjiball.us is on (pinned as `account_id` in `wrangler.toml`; the migration commands use it too): check `npx wrangler whoami` first, never a personal account. After a change to `scripts/commands.js`, also `npm run register`.
 
 ## PR habits
 

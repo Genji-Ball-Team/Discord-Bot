@@ -14,6 +14,8 @@ crons = ["* * * * *"]
 binding = "DB"
 database_name = "genjiball-discord-bot"
 database_id = "436cac8d-7325-44c7-9d83-cb22cbe17e86"
+# The schema: migrations/*.sql, applied by `npm run deploy` (or `npm run db:migrate:remote`).
+migrations_dir = "migrations"
 
 # Cloudflare's browser: a picture of each finished tourney's page for TOURNEY_RESULTS_CHANNEL_ID
 # (src/screenshot.js). Needs a compatibility_date of 2026-03-24 or later.
