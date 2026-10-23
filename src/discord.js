@@ -16,6 +16,9 @@ export const ResponseType = {
 };
 export const EPHEMERAL = 64;
 
+/** Most members one list call returns. */
+export const MEMBERS_PAGE = 1000;
+
 /** Nobody gets a notification from a message sent with this. */
 export const NO_PINGS = { parse: [] };
 
@@ -119,9 +122,9 @@ export class Discord {
     return this.call("POST", "/users/@me/channels", { recipient_id: userId });
   }
 
-  /** Up to 1,000 members after `after` (a user id), with their roles. Needs the Server Members intent. */
+  /** One page of members after `after` (a user id), with their roles. Needs the Server Members intent. */
   listMembers(guildId, after = "0") {
-    return this.call("GET", `/guilds/${guildId}/members?limit=1000&after=${after}`);
+    return this.call("GET", `/guilds/${guildId}/members?limit=${MEMBERS_PAGE}&after=${after}`);
   }
 
   addRole(guildId, userId, roleId) {

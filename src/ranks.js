@@ -11,7 +11,7 @@
 // one, for the leaderboards. The site reads them from `GET /titles` (genjiball-ranked
 // src/site/titles.ts), and `/gr leaderboard` from the site's `/api/titles`.
 
-import { NO_PINGS, lostAccess } from "./discord.js";
+import { MEMBERS_PAGE, NO_PINGS, lostAccess } from "./discord.js";
 import { escapeMarkdown, shownTier } from "./site.js";
 import { minutes, setting } from "./time.js";
 
@@ -75,7 +75,7 @@ async function members(env, discord, budget) {
     if (budget() < 2) return null;
     const page = await discord.listMembers(guildOf(env), after);
     for (const m of page) roles.set(m.user.id, m.roles ?? []);
-    if (page.length < 1000) return roles;
+    if (page.length < MEMBERS_PAGE) return roles;
     after = page.at(-1).user.id;
   }
 }
