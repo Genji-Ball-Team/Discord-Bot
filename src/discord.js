@@ -45,7 +45,7 @@ export async function verifyRequest(request, publicKey) {
   }
 }
 
-export class DiscordError extends Error {
+class DiscordError extends Error {
   constructor(status, message) {
     super(`Discord ${status}: ${message}`);
     this.status = status;

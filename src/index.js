@@ -5,13 +5,13 @@
 // All commands are under /gr. Everyone can use /gr stats; the rest is for Staff (STAFF_ROLE_ID, or
 // server admins).
 
-import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, verifyRequest } from "./discord.js";
+import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, lostAccess, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { link, linkedUsers, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
 import { postResults } from "./results.js";
 import { Site } from "./site.js";
 import { autocompletePlayers, renderStats, resolvePlayer } from "./stats.js";
-import { minutes } from "./time.js";
+import { minutes, setting } from "./time.js";
 import { callsSite, confirmButton, parseTourneyButton, postTourneyResults, runTournaments, signup, syncTourneys, tourneyMinutes } from "./tournament.js";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -40,12 +40,15 @@ export function optionsOf(data) {
 const refreshMinutes = (env) => minutes(env.LEADERBOARD_REFRESH_MINUTES);
 /** What every leaderboard render needs from here: linked members, for the titles' @mentions. */
 const boardOptions = (env, extra = {}) => ({ linked: (ids) => linkedUsers(env, ids), ...extra });
+/** The live leaderboard's message: EU page 1. */
+const liveBoard = async (env, site) =>
+  (await renderLeaderboard(site, "eu", 1, boardOptions(env, { live: true, refreshMinutes: refreshMinutes(env) }))).message;
 
 const ADMINISTRATOR = 1n << 3n;
 
 export function isStaff(env, member) {
   if (!member) return false;
-  const staffRole = (env.STAFF_ROLE_ID ?? "").trim();
+  const staffRole = setting(env, "STAFF_ROLE_ID");
   if (staffRole && member.roles?.includes(staffRole)) return true;
   try {
     return (BigInt(member.permissions ?? "0") & ADMINISTRATOR) !== 0n;
@@ -55,7 +58,7 @@ export function isStaff(env, member) {
 }
 
 async function setupLeaderboard(env, discord, site, interaction, channelId) {
-  const { message } = await renderLeaderboard(site, "eu", 1, boardOptions(env, { live: true, refreshMinutes: refreshMinutes(env) }));
+  const message = await liveBoard(env, site);
   const existing = await env.DB.prepare("SELECT message_id FROM boards WHERE channel_id = ?").bind(channelId).first();
   let messageId = null;
   if (existing) {
@@ -70,7 +73,7 @@ async function setupLeaderboard(env, discord, site, interaction, channelId) {
     try {
       messageId = (await discord.sendMessage(channelId, message)).id;
     } catch (e) {
-      if (e.status === 403 || e.status === 404) {
+      if (lostAccess(e)) {
         return `I can't post in <#${channelId}>. Give me **View Channel**, **Send Messages** and **Embed Links** there.`;
       }
       throw e;
@@ -209,11 +212,10 @@ async function refreshBoards(env, discord, site, budget) {
   for (const b of results) {
     if (budget() < 4) return;
     try {
-      const { message } = await renderLeaderboard(site, "eu", 1, boardOptions(env, { live: true, refreshMinutes: refreshMinutes(env) }));
-      await discord.editMessage(b.channel_id, b.message_id, message);
+      await discord.editMessage(b.channel_id, b.message_id, await liveBoard(env, site));
       await env.DB.prepare("UPDATE boards SET refreshed_at = ? WHERE channel_id = ?").bind(Date.now(), b.channel_id).run();
     } catch (e) {
-      if (e.status === 404 || e.status === 403) await env.DB.prepare("DELETE FROM boards WHERE channel_id = ?").bind(b.channel_id).run();
+      if (lostAccess(e)) await env.DB.prepare("DELETE FROM boards WHERE channel_id = ?").bind(b.channel_id).run();
       else console.error(e);
     }
   }

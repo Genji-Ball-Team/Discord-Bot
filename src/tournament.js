@@ -20,15 +20,17 @@
 
 import { NO_PINGS, EMBED_COLOR, lostAccess } from "./discord.js";
 import { tourneyScreenshot } from "./screenshot.js";
-import { REGIONS, Site, escapeMarkdown, signsUp } from "./site.js";
-import { discordTime, minutes } from "./time.js";
+import { REGIONS, Site, escapeMarkdown, regionInfo, signsUp } from "./site.js";
+import { discordTime, minutes, setting } from "./time.js";
 
-export const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
-const signupChannel = (env) => (env.TOURNEY_CHANNEL_ID ?? "").trim();
-const tourneyResultsChannel = (env) => (env.TOURNEY_RESULTS_CHANNEL_ID ?? "").trim();
+const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
+const signupChannel = (env) => setting(env, "TOURNEY_CHANNEL_ID");
+const tourneyResultsChannel = (env) => setting(env, "TOURNEY_RESULTS_CHANNEL_ID");
 const MESSAGE_MAX = 2000;
 /** How long after the start the bot still looks for the standings on the site. */
 const RESULTS_WINDOW_SECONDS = 3 * 24 * 3600;
+
+const getTournament = (env, id) => env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
 
 const userOf = (interaction) => interaction.member?.user ?? interaction.user;
 const displayName = (interaction) => {
@@ -36,15 +38,13 @@ const displayName = (interaction) => {
   return (interaction.member?.nick || user?.global_name || user?.username || "player").slice(0, 64);
 };
 
-// ---- What the messages look like ----
-
 /**
  * The sign-up post, compact: one line, then when, where and how many in three boxes. The title opens
  * the tourney's page on the site.
  */
 function signupPost(env, t, counts) {
   const start = t.starts_at * 1000;
-  const info = REGIONS[t.region] ?? REGIONS.eu;
+  const info = regionInfo(t.region);
   const confirming = t.phase === "confirming";
   const cancelled = t.phase === "cancelled";
   let description = `Register below. You'll get a DM to confirm ${confirmMinutes(env)} minutes before the start.`;
@@ -88,7 +88,7 @@ function signupPost(env, t, counts) {
 }
 
 function confirmDm(env, t) {
-  const info = REGIONS[t.region] ?? REGIONS.eu;
+  const info = regionInfo(t.region);
   return {
     content:
       `⏰ **Tournament starting in ${confirmMinutes(env)} minutes**\n` +
@@ -158,8 +158,6 @@ function resultsMessage(site, t) {
   };
 }
 
-// ---- Database ----
-
 /** What the post counts: the site's sign-ups when they're one list, else the bot's own. */
 async function counts(env, t) {
   const row = await env.DB.prepare("SELECT COUNT(*) AS registered, COALESCE(SUM(confirmed), 0) AS confirmed FROM entrants WHERE tournament_id = ?")
@@ -188,8 +186,6 @@ async function refreshPost(env, discord, t) {
   }
   if (signsUp(env)) await env.DB.prepare("UPDATE tournaments SET signups = ? WHERE id = ?").bind(t.signups, t.id).run();
 }
-
-// ---- Following the site's tourneys ----
 
 export const tourneyMinutes = (env) => minutes(env.TOURNEY_REFRESH_MINUTES);
 const toUnix = (iso) => Math.floor(Date.parse(iso) / 1000);
@@ -330,8 +326,6 @@ async function postNew(env, discord, channelId, region, st, nowMs) {
     .run();
 }
 
-// ---- Buttons ----
-
 /** A tournament button (`gr:<action>:<id>`), or the in-game name form (`gr:ign:<id>`), or null. */
 export function parseTourneyButton(customId) {
   const m = /^gr:(reg|unreg|who|conf|ign):(\d+)$/.exec(customId ?? "");
@@ -396,7 +390,7 @@ export const callsSite = (env, action) => signsUp(env) && action !== "reg";
  */
 const refreshLater = (env, discord, id, signups) => async () => {
   try {
-    const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
+    const t = await getTournament(env, id);
     if (t?.phase !== "open" && t?.phase !== "confirming") return;
     await refreshPost(env, discord, { ...t, signups: signups ?? t.signups });
   } catch (e) {
@@ -410,7 +404,7 @@ const refreshLater = (env, discord, id, signups) => async () => {
  * post's counts changed. With SITE_TOKEN each is a call to the site too (see `callsSite`).
  */
 export async function signup(env, site, discord, interaction, action, id, nowMs = Date.now()) {
-  const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
+  const t = await getTournament(env, id);
   if (!t) return { reply: "I don't know that tournament." };
   const name = `**${escapeMarkdown(t.name)}**`;
   if (t.phase === "cancelled") return { reply: `${name} was cancelled.` };
@@ -532,7 +526,7 @@ async function unregister(env, site, t, name, userId) {
  * updated in place), and the post's refresh when its Confirmed count changed.
  */
 export async function confirmButton(env, discord, interaction, id, nowMs = Date.now()) {
-  const t = await env.DB.prepare("SELECT * FROM tournaments WHERE id = ?").bind(id).first();
+  const t = await getTournament(env, id);
   const name = t ? `**${escapeMarkdown(t.name)}**` : "this tournament";
   const done = (content, refresh) => ({ message: { content, components: [], allowed_mentions: NO_PINGS }, refresh });
   if (!t) return done("I don't know that tournament.");
@@ -544,8 +538,6 @@ export async function confirmButton(env, discord, interaction, id, nowMs = Date.
   if (!row.confirmed) await env.DB.prepare("UPDATE entrants SET confirmed = 1 WHERE tournament_id = ? AND user_id = ?").bind(id, userId).run();
   return done(`✅ **Confirmed.** You're on the list for ${name}. Good luck!`, row.confirmed ? undefined : refreshLater(env, discord, t.id));
 }
-
-// ---- The cron, every minute ----
 
 /** Sends the Confirm DMs still pending, as many as this run's budget allows. D1 allows 50 queries a
  * run on the free plan, so the writes are a few statements whatever the number of DMs. */
@@ -661,7 +653,7 @@ async function postStandings(env, discord, site, t) {
  * of its page on the site, as staff used to post by hand. Made once, with the standings: when the
  * picture can't be taken, the embed goes without it.
  */
-export function tourneyResultsPost(site, t, picture) {
+function tourneyResultsPost(site, t, picture) {
   const url = site.tourneyUrl(t.id);
   const embed = { title: t.name.slice(0, 256), url, description: url, color: EMBED_COLOR };
   if (picture) embed.image = { url: `attachment://${picture}` };

@@ -9,10 +9,10 @@
 // A later recompute that moves ratings isn't in the feed, so a post keeps the numbers it was made with.
 
 import { NO_PINGS, EMBED_COLOR, lostAccess } from "./discord.js";
-import { REGIONS, escapeMarkdown } from "./site.js";
-import { discordTime } from "./time.js";
+import { escapeMarkdown, regionInfo } from "./site.js";
+import { discordTime, setting } from "./time.js";
 
-const resultsChannel = (env) => (env.RESULTS_CHANNEL_ID ?? "").trim();
+const resultsChannel = (env) => setting(env, "RESULTS_CHANNEL_ID");
 /** Matches per feed page: each may cost a site request and a Discord one. */
 const FEED_PAGE = 5;
 
@@ -32,7 +32,7 @@ function ratingText(p) {
 
 /** The post for a rated tournament match, from `/api/matches/:id`. */
 export function resultsPost(site, match) {
-  const info = REGIONS[match.region] ?? REGIONS.eu;
+  const info = regionInfo(match.region);
   const players = [...(match.players ?? [])].sort(
     (a, b) => (a.place ?? 99) - (b.place ?? 99) || (b.roundWins ?? 0) - (a.roundWins ?? 0) || (b.kills ?? 0) - (a.kills ?? 0),
   );
@@ -96,12 +96,11 @@ async function handleMatch(env, discord, site, channelId, item) {
     try {
       await discord.editMessage(post.channel_id, post.message_id, message);
       await env.DB.prepare("UPDATE result_posts SET shown = ? WHERE match_id = ?").bind(shown, item.id).run();
-      return;
     } catch (e) {
-      if (!lostAccess(e)) throw e;
       // Someone deleted the post: leave it deleted.
-      return;
+      if (!lostAccess(e)) throw e;
     }
+    return;
   }
   const sent = await discord.sendMessage(channelId, message).catch((e) => {
     if (!lostAccess(e)) throw e;

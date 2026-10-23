@@ -1,3 +1,6 @@
+/** A text setting from wrangler.toml or a secret: trimmed, "" when it is not set. */
+export const setting = (env, key) => (env[key] ?? "").trim();
+
 /** A minutes setting from wrangler.toml: 1 to 60, `fallback` when it isn't a number. */
 export const minutes = (value, fallback = 5) => Math.min(60, Math.max(1, Number(value) || fallback));
 
