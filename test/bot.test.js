@@ -155,11 +155,17 @@ test("a tourney made on the site, from its sign-up post to the final list", asyn
   assert.equal(post.body.content, "");
   assert.deepEqual(post.body.allowed_mentions, { parse: [] });
   assert.equal(post.body.embeds[0].title, "🏆 EU FFA Tournament");
-  assert.match(post.body.embeds[0].description, /<t:1791658800:F>/);
-  assert.deepEqual(post.body.components[0].components.map((b) => b.label), ["Register", "Unregister", "Who's signed up"]);
+  assert.equal(post.body.embeds[0].url, `https://genjiball.us/tourney?id=${id}`);
+  // Compact: one line, then when, where and how many.
+  assert.deepEqual(post.body.embeds[0].fields.map((f) => [f.name, f.value]), [
+    ["🕘 Starts", "<t:1791658800:f>\n<t:1791658800:R>"],
+    ["🌍 Region", "🇪🇺 EU"],
+    ["👥 Signed up", "**0**"],
+  ]);
+  assert.deepEqual(post.body.components[0].components.map((b) => b.label), ["Register", "Unregister", "Who's in"]);
   assert.equal(post.body.components[0].components[0].style, 3); // green
   // Registering stays open until the start (and confirms at once in the last minutes).
-  assert.equal(post.body.embeds[0].footer.text, `Sign-ups close at the start · Tournament #${id}`);
+  assert.equal(post.body.embeds[0].footer.text, `Times are in your own time zone · Tournament #${id}`);
 
   // Four players register; one leaves again.
   for (const p of ["p1", "p2", "p3", "p4"]) {
@@ -200,7 +206,7 @@ test("a tourney made on the site, from its sign-up post to the final list", asyn
   assert.deepEqual(confirmed.data.components, []);
   // The post's Confirmed count follows.
   const lastEdit = calls.filter((c) => c.method === "PATCH" && c.path.startsWith("/channels/signups/messages/")).at(-1);
-  assert.deepEqual(lastEdit.body.embeds[0].fields.find((f) => f.name === "Confirmed").value, "**1**");
+  assert.deepEqual(lastEdit.body.embeds[0].fields.find((f) => f.name === "✅ Confirmed").value, "**1** of 3");
   assert.match((await send(e, press(`gr:reg:${id}`, player("p5")))).data.content, /registered and confirmed/);
   assert.match((await send(e, press(`gr:who:${id}`, player("p9")))).data.content, /4 signed up · 2 confirmed/);
 
@@ -297,7 +303,7 @@ test("a new sign-up channel: the open sign-up moves there with its registrations
   e.TOURNEY_CHANNEL_ID = "new-signups";
   await cron(e, NOW + 5 * 60_000);
   const [moved] = posts(calls, "new-signups");
-  assert.equal(moved.body.embeds[0].fields.find((f) => f.name === "Signed up").value, "**1**");
+  assert.equal(moved.body.embeds[0].fields.find((f) => f.name === "👥 Signed up").value, "**1**");
   assert.ok(calls.some((c) => c.method === "DELETE" && c.path.startsWith("/channels/signups/messages/")));
   // Moved once; the old channel gets nothing more.
   await cron(e, NOW + 10 * 60_000);
@@ -341,7 +347,7 @@ test("moved later on the site while confirming: back to sign-ups, DMs again at t
   t.startsAt = new Date(later).toISOString();
   await cron(e, START - 5 * 60_000 + 5 * 60_000); // the next sync, at the old start: no list
   assert.equal(calls.some((c) => c.method === "DELETE"), false);
-  assert.match(calls.filter((c) => c.method === "PATCH").at(-1).body.embeds[0].description, new RegExp(`<t:${later / 1000}:F>`));
+  assert.match(calls.filter((c) => c.method === "PATCH").at(-1).body.embeds[0].fields[0].value, new RegExp(`<t:${later / 1000}:f>`));
   await cron(e, later - 5 * 60_000);
   assert.equal(dmCount(), 2);
 });
@@ -468,7 +474,7 @@ test("a post refresh after a button shows the tourney as it is by then", async (
   const first = await signup(e, new Site(e), new Discord(e), press(`gr:reg:${t.id}`, player("p1")), "reg", t.id, NOW);
   e.DB.raw.prepare("UPDATE tournaments SET starts_at = starts_at + 3600 WHERE id = ?").run(t.id);
   await first.refresh();
-  assert.match(edits().at(-1).body.embeds[0].description, new RegExp(`<t:${START / 1000 + 3600}:F>`));
+  assert.match(edits().at(-1).body.embeds[0].fields[0].value, new RegExp(`<t:${START / 1000 + 3600}:f>`));
 
   // Cancelled before the refresh runs: the crossed-out post stays, no buttons come back.
   const second = await signup(e, new Site(e), new Discord(e), press(`gr:reg:${t.id}`, player("p2")), "reg", t.id, NOW);

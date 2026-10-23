@@ -20,7 +20,7 @@ Everything is under **`/gr`**.
 
 Admins make tourneys on **genjiball.us** (the admin page), with their lobbies and hosts, as before.
 
-1. **The post.** Within `TOURNEY_REFRESH_MINUTES` (5) of a tourney being made on the site, the bot posts its sign-up in `TOURNEY_CHANNEL_ID`: name, start time in each reader's own time zone, region and the sign-up count, with **Register**, **Unregister** and **👥 Who's signed up**. It never pings anyone. Each button answers privately. **Register** asks for your in-game name (your server name filled in) and signs you up on the site too: see [One list with the site](#one-list-with-the-site). When `TOURNEY_CHANNEL_ID` changes, the sign-ups still open move to the new channel on the next sync (posted again there, the old post deleted), with everyone registered, and their list and standings follow.
+1. **The post.** Within `TOURNEY_REFRESH_MINUTES` (5) of a tourney being made on the site, the bot posts its sign-up in `TOURNEY_CHANNEL_ID`: compact: its name (opening its page on the site), one line, then the start time (in each reader's own time zone), region and sign-up count in three boxes, with **✅ Register**, **Unregister** and **👥 Who's in**. It never pings anyone. Each button answers privately. **Register** asks for your in-game name (your server name filled in) and signs you up on the site too: see [One list with the site](#one-list-with-the-site). When `TOURNEY_CHANNEL_ID` changes, the sign-ups still open move to the new channel on the next sync (posted again there, the old post deleted), with everyone registered, and their list and standings follow.
 2. **5 minutes before** (`CONFIRM_MINUTES`), everyone registered gets a DM: "⏰ Tournament starting in 5 minutes" with a **Confirm** button. Anyone who doesn't press it isn't playing. Register stays open, and registering now confirms at once. Players with DMs closed never get the button, so they're out.
 3. **At the start**, the sign-up post is deleted and the list of confirmed players is posted as @mentions that notify nobody, ending "Hosts: split the lobbies from this list."
 4. When an admin marks the tourney **done** on the site (with lobby standings), the bot posts the standings under the list, and a picture of the tourney's page on the site with its link in `TOURNEY_RESULTS_CHANNEL_ID` (see below).
@@ -33,7 +33,7 @@ With the `SITE_TOKEN` secret set, Discord and the tourney's page on genjiball.us
 
 - **Register** signs you up on the site with the in-game name you type. A name someone already typed on the page with no Discord account is you: you take that sign-up. A name another Discord user has is refused.
 - **Unregister** takes you off the site's list too.
-- The post's count and **Who's signed up** are the site's: names typed on the page are counted and listed ("on the site"). A name typed on the page shows up on the post within 5 minutes.
+- The post's count and **Who's in** are the site's: names typed on the page are counted and listed ("on the site"). A name typed on the page shows up on the post within 5 minutes.
 - An admin who removes you on the site's admin page removes you here too: no Confirm DM, not on the list.
 - Players who signed up only on the page can't get the Confirm DM. The list at the start names them apart, for the hosts.
 - Registrations from before `SITE_TOKEN` was set are sent within 5 minutes, under the server name they registered with. One whose name another Discord user already has stays registered in Discord only, until the player presses **Register** again and types another name.
