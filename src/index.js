@@ -207,12 +207,15 @@ async function handleAutocomplete(env, interaction) {
   return json({ type: ResponseType.AUTOCOMPLETE, data: { choices } });
 }
 
+/** Every live board shows the same message: drawn once a refresh (its site requests), then one edit a board. */
 async function refreshBoards(env, discord, site, budget) {
   const { results } = await env.DB.prepare("SELECT * FROM boards ORDER BY refreshed_at").all();
+  let message = null;
   for (const b of results) {
-    if (budget() < 4) return;
+    if (budget() < (message ? 2 : 4)) return;
     try {
-      await discord.editMessage(b.channel_id, b.message_id, await liveBoard(env, site));
+      message ??= await liveBoard(env, site);
+      await discord.editMessage(b.channel_id, b.message_id, message);
       await env.DB.prepare("UPDATE boards SET refreshed_at = ? WHERE channel_id = ?").bind(Date.now(), b.channel_id).run();
     } catch (e) {
       if (lostAccess(e)) await env.DB.prepare("DELETE FROM boards WHERE channel_id = ?").bind(b.channel_id).run();

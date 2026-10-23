@@ -206,3 +206,40 @@ test("/gr leaderboard: God and Demigod above everyone, the rest numbered from 1 
   const two = await renderLeaderboard(new Site(e), "eu", 2, {});
   assert.match(two.message.embeds[0].description.split("\n")[0], /^`21\.`/);
 });
+
+test("tiers are only read again when the match feed moved, a link is new, or an hour went by", async () => {
+  const e = env();
+  const members = [member("100")];
+  const tiers = new Map([[7, rated(7, "Fealthy", { eu: "Master" })]]);
+  const calls = installFetch({ members, tiers });
+  const setCursor = (c) => e.DB.prepare("INSERT OR REPLACE INTO bot_state (key, value) VALUES ('match_feed_cursor', ?)").bind(c).run();
+  const tierReads = () => calls.filter((c) => c.site && c.path.startsWith("/api/tiers")).length;
+  const run = async (ms) => {
+    const discord = new Discord(e, 45);
+    const site = new Site(e);
+    await runRanks(e, discord, site, () => discord.left - site.calls, ms);
+  };
+  await setCursor("10");
+  await link(e, new Discord(e), new Site(e), { userId: "100", has: ["10"], playerId: 7 });
+  const t0 = Date.UTC(2026, 9, 6, 10, 0);
+
+  await run(t0);
+  assert.equal(tierReads(), 2); // the link's, then the first full check
+  // Nothing rated since: the members are still read, the tiers aren't.
+  tiers.set(7, rated(7, "Fealthy", { eu: "Grandmaster" }));
+  members[0].roles = ["99"]; // their rank role taken away by hand
+  await run(t0 + 5 * 60_000);
+  assert.equal(tierReads(), 2);
+  assert.deepEqual(members[0].roles.sort(), ["12", "99"]);
+  // A match was rated: the climb is seen.
+  await setCursor("11");
+  await run(t0 + 10 * 60_000);
+  assert.equal(tierReads(), 3);
+  assert.deepEqual(members[0].roles.sort(), ["13", "99"]);
+  // An hour after the last read, even with no new match (a recompute isn't in the feed).
+  await run(t0 + 30 * 60_000);
+  assert.equal(tierReads(), 3);
+  await run(t0 + 70 * 60_000);
+  assert.equal(tierReads(), 4);
+});
+

@@ -25,6 +25,41 @@ class SiteError extends Error {
   }
 }
 
+/**
+ * The site's public answers, kept for a minute (the site's own cache time), so a name typed letter by
+ * letter or a player asked about again costs genjiball.us's D1 one read. Kept in this isolate, and in
+ * Cloudflare's cache where the Worker has one, so another isolate in the same place finds it too.
+ */
+const CACHE_SECONDS = 60;
+const MEMORY_ENTRIES = 500;
+const memory = new Map();
+
+/** Empties this isolate's cache: for the tests, whose fake site changes between them. */
+export const clearSiteCache = () => memory.clear();
+
+async function cached(url) {
+  const hit = memory.get(url);
+  if (hit && hit.until > Date.now()) return hit;
+  try {
+    const res = await globalThis.caches?.default?.match(url);
+    if (res) return { data: await res.json() };
+  } catch {
+    // No cache here: ask the site.
+  }
+  return null;
+}
+
+async function keep(url, data) {
+  if (memory.size >= MEMORY_ENTRIES) memory.delete(memory.keys().next().value);
+  memory.set(url, { data, until: Date.now() + CACHE_SECONDS * 1000 });
+  try {
+    const headers = { "Content-Type": "application/json", "Cache-Control": `max-age=${CACHE_SECONDS}` };
+    await globalThis.caches?.default?.put(url, new Response(JSON.stringify(data), { headers }));
+  } catch {
+    // Only the isolate's copy, then.
+  }
+}
+
 /** SITE_TIMEOUT_SECONDS: how long a site request may take before it counts as the site failing. */
 export const siteTimeoutMs = (env) => Math.min(30, Math.max(1, Number(env.SITE_TIMEOUT_SECONDS) || 5)) * 1000;
 
@@ -76,13 +111,20 @@ export class Site {
     return this.bot("DELETE", `/tourneys/${id}/signups/${userId}`);
   }
 
-  async get(path, params = {}) {
+  /** `cache`: the answer may be up to a minute old (players and the leaderboard, not tourneys or the feed). */
+  async get(path, params = {}, { cache = false } = {}) {
     const url = new URL(this.base + path);
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+    const key = url.toString();
+    if (cache) {
+      const hit = await cached(key);
+      if (hit) return hit.data;
+    }
     const res = await this.request(url, { headers: { Accept: "application/json" } }, `for ${path}`);
-    if (res.status === 404) return null;
-    if (!res.ok) throw new SiteError(res.status, `The site answered ${res.status} for ${path}`);
-    return res.json();
+    if (res.status !== 404 && !res.ok) throw new SiteError(res.status, `The site answered ${res.status} for ${path}`);
+    const data = res.status === 404 ? null : await res.json();
+    if (cache) await keep(key, data);
+    return data;
   }
 
   /** Upcoming tourneys (scheduled and live) and the first page of past ones. */
@@ -92,7 +134,7 @@ export class Site {
 
   /** The leaderboard's API pages hold 50 players each. */
   leaderboardPage(region, page) {
-    return this.get("/api/leaderboard", { region, page });
+    return this.get("/api/leaderboard", { region, page }, { cache: true });
   }
 
   /** Each player's rating and tier in every region, for the rank roles: at most 200 ids. */
@@ -102,23 +144,25 @@ export class Site {
 
   /** The region's God and Demigod, with their rating and real place on the leaderboard. */
   titles(region) {
-    return this.get("/api/titles", { region });
+    return this.get("/api/titles", { region }, { cache: true });
   }
 
+  /** Lowercased: "Fealthy" and "fealthy" are one search, and one cache entry. */
   search(text, region) {
-    return this.get("/api/players", { search: text, region });
+    text = text.toLowerCase();
+    return this.get("/api/players", { search: text, region }, { cache: true });
   }
 
   player(id, region) {
-    return this.get(`/api/players/${id}`, { region });
+    return this.get(`/api/players/${id}`, { region }, { cache: true });
   }
 
   history(id, region) {
-    return this.get(`/api/players/${id}/history`, { region });
+    return this.get(`/api/players/${id}/history`, { region }, { cache: true });
   }
 
   stats(id, region) {
-    return this.get(`/api/players/${id}/stats`, { region });
+    return this.get(`/api/players/${id}/stats`, { region }, { cache: true });
   }
 
   tourney(id) {

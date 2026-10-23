@@ -1,10 +1,11 @@
 // Rank roles. Staff link a member to their genjiball.us player (/gr link); the bot then gives them the
 // role of their tier, the higher of their EU and NA ones (RANK_ROLES), or UNRANKED_ROLE_ID below the
 // first tier or unrated. Every RANK_REFRESH_MINUTES it reads the server's members (one request, with
-// the Server Members intent) and every linked player's tiers (one site request, `/api/tiers`), and
-// fixes whoever's role is wrong: a climb or drop, a role changed by hand, someone who rejoined. Only
-// these roles are ever added or removed, one at a time, never the member's whole list. A climb is
-// posted in RANKUP_CHANNEL_ID, pinging nobody.
+// the Server Members intent) and, when a match was rated since or an hour went by, every linked
+// player's tiers (one site request, `/api/tiers`), and fixes whoever's role is wrong: a climb or
+// drop, a role changed by hand, someone who rejoined. Only these roles are ever added or removed,
+// one at a time, never the member's whole list. A climb is posted in RANKUP_CHANNEL_ID, pinging
+// nobody.
 //
 // Titles (God, Demigod) are won in the 1v1 tourney and given by Staff as roles per region
 // (GOD_ROLE_IDS, DEMIGOD_ROLE_IDS). The bot doesn't change them: it notes which linked players have
@@ -12,6 +13,7 @@
 // src/site/titles.ts), and `/gr leaderboard` from the site's `/api/titles`.
 
 import { MEMBERS_PAGE, NO_PINGS, lostAccess } from "./discord.js";
+import { getState } from "./results.js";
 import { escapeMarkdown, shownTier } from "./site.js";
 import { minutes, setting } from "./time.js";
 
@@ -90,6 +92,29 @@ async function tiersOf(site, ids) {
   return found;
 }
 
+/** A full tiers read at least this often: a ratings recompute or an admin's change isn't in the match feed. */
+const TIERS_MAX_AGE_MS = 60 * 60 * 1000;
+
+/**
+ * Whether the tiers need reading from the site. Tiers only move when a match is rated or voided, and
+ * then the match feed (src/results.js) has moved on. So the site is asked when the feed has moved
+ * since the last full check, when it's an hour old, or when a link has never been checked. Without
+ * the feed (no RESULTS_CHANNEL_ID), every time.
+ */
+async function tiersStale(env, links, cursor, nowMs) {
+  if (links.some((l) => l.rank === null)) return true;
+  if (cursor === null || cursor !== (await getState(env, "ranks_tiers_cursor"))) return true;
+  return nowMs - Number((await getState(env, "ranks_tiers_at")) ?? 0) >= TIERS_MAX_AGE_MS;
+}
+
+/** A full check finished: where the feed was when its tiers were read. */
+function tiersChecked(env, cursor, nowMs) {
+  return env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO bot_state (key, value) VALUES ('ranks_tiers_cursor', ?)").bind(cursor ?? ""),
+    env.DB.prepare("INSERT OR REPLACE INTO bot_state (key, value) VALUES ('ranks_tiers_at', ?)").bind(String(nowMs)),
+  ]);
+}
+
 /**
  * The rank check. A run that runs out of budget before everyone is right says so (`ranks_pending` in
  * bot_state), and the next minute's run goes on.
@@ -99,22 +124,27 @@ export async function runRanks(env, discord, site, budget, nowMs = Date.now()) {
   const { results: links } = await env.DB.prepare("SELECT * FROM links ORDER BY linked_at").all();
   await setPending(env, false);
   if (!links.length) return saveTitles(env, []);
+  // Read before the tiers: a feed move during the check is caught by the next one.
+  const cursor = await getState(env, "match_feed_cursor");
+  const fresh = await tiersStale(env, links, cursor, nowMs);
   const roles = await members(env, discord, budget);
-  if (!roles || budget() < 2 + Math.ceil(links.length / 200)) return setPending(env, true);
-  const tiers = await tiersOf(site, links.map((l) => l.player_id));
+  if (!roles || budget() < 2 + (fresh ? Math.ceil(links.length / 200) : 0)) return setPending(env, true);
+  // Nothing rated since the last read: each link's rank is the one it was given then. The members
+  // are still read, for roles changed by hand and members who came back.
+  const tiers = fresh ? await tiersOf(site, links.map((l) => l.player_id)) : null;
 
   const titles = [];
   const updates = [];
   let done = true;
   for (const link of links) {
-    const player = tiers.get(link.player_id);
+    const player = tiers ? tiers.get(link.player_id) : { playerId: link.player_id, name: link.name };
     const has = roles.get(link.user_id);
     // Gone from the site (an admin deleted the player): left as it is until relinked.
     if (!player) continue;
     for (const t of titleRoles(env)) if (has?.includes(t.roleId)) titles.push({ playerId: player.playerId, region: t.region, title: t.title });
     // Not in the server now: their role is put right when they're back.
     if (!has) continue;
-    const rank = rankOf(env, player);
+    const rank = tiers ? rankOf(env, player) : link.rank;
     const changes = changesFor(env, has, roleFor(env, rank));
     const climbed = link.rank !== null && rank !== link.rank && tierIndex(env, rank) > tierIndex(env, link.rank) && rankupChannel(env);
     const cost = 2 * (changes.add.length + changes.remove.length) + (climbed ? 2 : 0);
@@ -149,6 +179,7 @@ export async function runRanks(env, discord, site, budget, nowMs = Date.now()) {
       .run();
   }
   if (!done) return setPending(env, true);
+  if (fresh) await tiersChecked(env, cursor, nowMs);
   await saveTitles(env, titles);
 }
 

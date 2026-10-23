@@ -137,6 +137,7 @@ The database (`migrations/`): `tournaments`, `entrants`, `dm_channels` (DM chann
 ## Good to know
 
 - **Limits:** the free Cloudflare plan allows about 45 Discord requests a minute, so the bot sends about 20 Confirm DMs a minute: 100 within the 5 minutes.
+- **Fewer reads on the site:** player searches, profiles and the leaderboard are kept for a minute; the live boards share one drawing; the rank check only reads the tiers again when a match was rated (or hourly).
 - **Where everything comes from:** genjiball.us's public API. The only thing the bot changes there is the tourney sign-ups (with `SITE_TOKEN`).
 - `npm test` runs the tests (Node 22.5 or newer).
 - Working on the code? Read [AGENTS.md](AGENTS.md), and open a PR with the template: CI runs `npm test` on it.

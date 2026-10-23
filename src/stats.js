@@ -3,9 +3,12 @@
 import { NO_PINGS } from "./discord.js";
 import { REGIONS, escapeMarkdown, regionOf, shownTier, tierColor } from "./site.js";
 
+/** From 3 letters: each search reads every alias on the site, and 2 letters match half the players. */
+const AUTOCOMPLETE_FROM = 3;
+
 export async function autocompletePlayers(site, text, regionValue) {
   const query = (text ?? "").trim();
-  if (query.length < 2) return [];
+  if (query.length < AUTOCOMPLETE_FROM) return [];
   const data = await site.search(query, regionValue ? regionOf(regionValue) : undefined).catch(() => null);
   return (data?.players ?? []).slice(0, 25).map((p) => {
     const rating = p.rating === null || p.rating === undefined ? "unrated" : `${Math.round(p.rating)}${shownTier(p) ? ` ${shownTier(p).label}` : ""}`;

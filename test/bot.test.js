@@ -879,3 +879,41 @@ test("Discord briefly down: an edit is retried once, a new message isn't (it may
   await assert.rejects(new Discord(ENV).sendMessage("chan1", { content: "hi" }), (e) => e.status === 503);
   assert.equal(calls.length, 1);
 });
+
+// ---------- fewer reads on the site ----------
+
+const siteReads = (calls, prefix) => calls.filter((c) => c.site && c.path.startsWith(prefix)).length;
+
+test("player answers are cached for a minute: asking again, or typing a name in another case, costs no site read", async () => {
+  const calls = installFetch();
+  const e = env();
+  await send(e, gr("stats", null, [opt("player", "1")]));
+  const first = calls.filter((c) => c.site).length;
+  await send(e, gr("stats", null, [opt("player", "1")]));
+  assert.equal(calls.filter((c) => c.site).length, first);
+
+  const site = new Site(ENV);
+  assert.deepEqual(await autocompletePlayers(site, "Fe"), []); // under 3 letters: not searched
+  assert.equal((await autocompletePlayers(site, "Fea"))[0].name, "Fealthy · 2000 Grandmaster");
+  await autocompletePlayers(site, "fea");
+  assert.equal(siteReads(calls, "/api/players?search="), 1);
+  // Tourneys and the match feed are never cached.
+  await site.tourney(41);
+  await site.tourney(41);
+  assert.equal(siteReads(calls, "/api/tourneys/41"), 2);
+});
+
+test("every live board shows one drawing of the leaderboard", async () => {
+  const calls = installFetch();
+  const e = env({ LEADERBOARD_REFRESH_MINUTES: "5" });
+  for (const [channel, message] of [["c1", "m1"], ["c2", "m2"], ["c3", "m3"]]) {
+    await e.DB.prepare("INSERT INTO boards (channel_id, guild_id, message_id) VALUES (?, 'guild1', ?)").bind(channel, message).run();
+  }
+  await cron(e, NOW);
+  const edits = calls.filter((c) => c.method === "PATCH" && /^\/channels\/c\d\/messages\/m\d$/.test(c.path));
+  assert.equal(edits.length, 3);
+  assert.deepEqual(edits[1].body, edits[0].body);
+  assert.equal(siteReads(calls, "/api/leaderboard"), 1);
+  assert.equal(siteReads(calls, "/api/titles"), 1);
+});
+

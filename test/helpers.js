@@ -2,6 +2,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { clearSiteCache } from "../src/site.js";
 
 export function fakeD1() {
   const db = new DatabaseSync(":memory:");
@@ -72,6 +73,8 @@ export function installFetch({
 } = {}) {
   const calls = [];
   let nextId = 5000;
+  // A new fake site: nothing from the last test's is cached.
+  clearSiteCache();
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url ?? String(input));
     const method = init.method ?? "GET";

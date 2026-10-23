@@ -59,7 +59,8 @@ export function resultsPost(site, match) {
 
 const isRated = (m) => (m.players ?? []).some((p) => p.ratingAfter !== null && p.ratingAfter !== undefined);
 
-async function getState(env, key) {
+/** A value from bot_state, or null. */
+export async function getState(env, key) {
   return (await env.DB.prepare("SELECT value FROM bot_state WHERE key = ?").bind(key).first())?.value ?? null;
 }
 
