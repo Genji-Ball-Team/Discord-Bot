@@ -9,10 +9,10 @@ Everything is under **`/gr`**.
 | Command | Who | What |
 |---|---|---|
 | `/gr stats player [region]` | Everyone | A player's rating, tier, rank, rounds, win %, kills, deflects, peak, streaks and recent form. Names autocomplete. |
-| `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard. Its buttons flip that message. |
+| `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard (20 a page, up to page 5). Its EU and NA buttons switch that message; "Full leaderboard" opens the site. |
 | `/gr link user player` | Staff | Links a member to their genjiball.us player (names autocomplete) and gives them their **rank role** at once. See [Rank roles](#rank-roles). |
 | `/gr unlink user` | Staff | Removes the link and puts them back on Unranked. |
-| `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 20, updated every 5 minutes, EU/NA and 5 pages of 20, up to the top 100). Its buttons open a private copy, so the channel's board stays the same for everyone. |
+| `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 20, updated every 5 minutes, EU/NA buttons and a "Full leaderboard" link to genjiball.us). Its buttons open a private copy, so the channel's board stays the same for everyone. |
 
 "Staff" means the role in `STAFF_ROLE_ID`, plus server admins. Anyone else gets "Only Staff can use this".
 
@@ -66,7 +66,7 @@ It needs two things in Discord: **Server Members Intent** on (Developer Portal â
 
 The 1v1 tourney's winner is **God** and the runner-up **Demigod** (at most 1 and 3 per region). They're titles, not ranks: Staff give the roles in `GOD_ROLE_IDS` and `DEMIGOD_ROLE_IDS` by hand, one per region, and the player keeps their rank role too. The bot only reads them, for linked members, at each check:
 
-- `/gr leaderboard` and the live leaderboard list them above everyone on page 1 (God, then Demigod), one line each with a `GOD` or `DEM` box where the list has its place numbers, with their Elo and their @mention, which Discord colours with their role and which pings nobody. The rest are numbered from 1 without them.
+- `/gr leaderboard` and the live leaderboard list them above everyone on page 1 (God, then Demigod) with their Elo and their @mention, which Discord colours with their role and which pings nobody. The rest are numbered from 1 without them.
 - genjiball.us shows them the same way on its leaderboard (God white, Demigod dark red): it reads them from the bot's `GET /titles` (genjiball-ranked `src/site/titles.ts`).
 - The game doesn't change: its top 10 and rank tags stay the real ratings.
 

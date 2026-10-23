@@ -35,7 +35,7 @@ export const commands = [
       {
         type: 1,
         name: "leaderboard",
-        description: "Staff: post a one-off leaderboard (top 100, 20 a page)",
+        description: "Staff: post a one-off leaderboard (20 a page, up to page 5)",
         options: [
           region(false, "EU or NA (EU if left out)"),
           { type: 4, name: "page", description: "Page 1–5", min_value: 1, max_value: 5, required: false },
