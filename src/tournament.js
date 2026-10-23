@@ -11,7 +11,7 @@
 //    site with its link in TOURNEY_RESULTS_CHANNEL_ID.
 //
 // A tourney renamed, moved or cancelled on the site is updated here on the next sync (every
-// TOURNEY_REFRESH_MINUTES).
+// TOURNEY_REFRESH_MINUTES). When TOURNEY_CHANNEL_ID changes, the sign-ups still open move there.
 //
 // One list with the site (SITE_TOKEN set): Register asks for the in-game name and signs the player
 // up on the site too, Unregister takes them off it, and the post's count and Who's signed up are
@@ -231,6 +231,7 @@ export async function syncTourneys(env, discord, site, budget, nowMs = Date.now(
       if (!st || st.status === "cancelled") await cancelHere(env, discord, t);
       else {
         if (st.name !== t.name || toUnix(st.startsAt) !== t.starts_at) await moveHere(env, discord, t, st, now);
+        if (t.channel_id !== channelId && budget() >= 3) await moveChannel(env, discord, t, channelId);
         if (signsUp(env)) await followSignups(env, discord, site, t, st, budget);
       }
     }
@@ -291,6 +292,24 @@ async function moveHere(env, discord, t, st, now) {
   await env.DB.batch(writes);
   Object.assign(t, { name: st.name, starts_at: startsAt, phase: reopen ? "open" : t.phase });
   await refreshPost(env, discord, t);
+}
+
+/**
+ * TOURNEY_CHANNEL_ID changed: the sign-up post moves there (posted again, the old one deleted), with
+ * its registrations. Its list and standings follow it.
+ */
+async function moveChannel(env, discord, t, channelId) {
+  let message;
+  try {
+    message = await discord.sendMessage(channelId, signupPost(env, t, await counts(env, t)));
+  } catch (e) {
+    if (!lostAccess(e)) throw e;
+    console.error(`can't move tourney ${t.id} to ${channelId}`, e);
+    return;
+  }
+  await env.DB.prepare("UPDATE tournaments SET channel_id = ?, message_id = ? WHERE id = ?").bind(channelId, message.id, t.id).run();
+  if (t.message_id) await discord.deleteMessage(t.channel_id, t.message_id).catch(() => null);
+  Object.assign(t, { channel_id: channelId, message_id: message.id });
 }
 
 async function postNew(env, discord, channelId, region, st, nowMs) {
