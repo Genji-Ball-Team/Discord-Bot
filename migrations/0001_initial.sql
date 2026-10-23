@@ -1,7 +1,7 @@
 -- The bot's own database (D1 "genjiball-discord-bot"): the first migration, the schema as production has it.
 -- Applied by `wrangler d1 migrations apply` (`npm run deploy`, or `npm run db:migrate:local` in a test). Never edit it once merged: add 0002_....sql.
 -- Production also still has two leftover tables, `tourneys` and `reminders` (and the index `tourneys_due`)
--- from an older version of the bot. Nothing reads them, so they are not here.
+-- from an older version of the bot. Nothing reads them: not here, and 0002 drops them.
 
 -- The site's tourneys the bot has posted. `id` is the tourney's id on genjiball.us.
 CREATE TABLE tournaments (
