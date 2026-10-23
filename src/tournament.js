@@ -18,7 +18,7 @@
 // the site's, names typed on the tourney's page included. Registrations from before SITE_TOKEN are
 // sent on the sync. Without SITE_TOKEN the bot keeps its own list, as before.
 
-import { NO_PINGS, RED, lostAccess } from "./discord.js";
+import { NO_PINGS, EMBED_COLOR, lostAccess } from "./discord.js";
 import { tourneyScreenshot } from "./screenshot.js";
 import { REGIONS, escapeMarkdown, signsUp } from "./site.js";
 import { discordTime, minutes } from "./time.js";
@@ -26,8 +26,6 @@ import { discordTime, minutes } from "./time.js";
 export const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
 const signupChannel = (env) => (env.TOURNEY_CHANNEL_ID ?? "").trim();
 const tourneyResultsChannel = (env) => (env.TOURNEY_RESULTS_CHANNEL_ID ?? "").trim();
-/** The finished tourney's side line: dark green with a hint of blue. */
-const TOURNEY_RESULTS_COLOR = 0x0e7a62;
 const MESSAGE_MAX = 2000;
 /** How long after the start the bot still looks for the standings on the site. */
 const RESULTS_WINDOW_SECONDS = 3 * 24 * 3600;
@@ -74,7 +72,7 @@ function signupPost(env, t, counts) {
       {
         title: cancelled ? `~~🏆 ${name}~~ · Cancelled` : confirming ? `🏆 ${name} · confirming now` : `🏆 ${name}`,
         description: lines.join("\n"),
-        color: cancelled ? 0x808080 : RED,
+        color: cancelled ? 0x808080 : EMBED_COLOR,
         fields,
         footer: {
           text: cancelled
@@ -152,7 +150,7 @@ function resultsMessage(site, t) {
       {
         title: `🏁 ${t.name.slice(0, 200)}: standings`,
         url: site.tourneyUrl(t.id),
-        color: RED,
+        color: EMBED_COLOR,
         fields,
         footer: { text: "Most rounds won first, ties broken by kills. ✅: checked by an admin against the final screenshot." },
       },
@@ -647,7 +645,7 @@ async function postStandings(env, discord, site, t) {
  */
 export function tourneyResultsPost(site, t, picture) {
   const url = site.tourneyUrl(t.id);
-  const embed = { title: t.name.slice(0, 256), url, description: url, color: TOURNEY_RESULTS_COLOR };
+  const embed = { title: t.name.slice(0, 256), url, description: url, color: EMBED_COLOR };
   if (picture) embed.image = { url: `attachment://${picture}` };
   return { embeds: [embed], allowed_mentions: NO_PINGS };
 }

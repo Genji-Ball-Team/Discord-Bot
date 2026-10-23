@@ -8,7 +8,7 @@
 // when what it shows changes, and deleted when the match is voided or stops being a tournament.
 // A later recompute that moves ratings isn't in the feed, so a post keeps the numbers it was made with.
 
-import { NO_PINGS, RED, lostAccess } from "./discord.js";
+import { NO_PINGS, EMBED_COLOR, lostAccess } from "./discord.js";
 import { REGIONS, escapeMarkdown } from "./site.js";
 import { discordTime } from "./time.js";
 
@@ -49,7 +49,7 @@ export function resultsPost(site, match) {
         title: title.slice(0, 256),
         url: `${site.base}/match?id=${match.id}`,
         description: [`${info.label} · ${rounds} rounds · ${discordTime(Date.parse(match.playedAt), "D")}`, "", ...lines].join("\n").slice(0, 4096),
-        color: RED,
+        color: EMBED_COLOR,
         footer: { text: `Tournament match: counts 3×, nobody moves more than ±200 · Match #${match.id} on genjiball.us` },
       },
     ],

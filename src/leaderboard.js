@@ -2,7 +2,7 @@
 // and Demigod (the 1v1 tourney's titles, src/ranks.js) are listed above everyone on page 1, without a
 // place, and the rest are numbered from 1 without them, as on the site.
 
-import { NO_PINGS, RED } from "./discord.js";
+import { NO_PINGS, EMBED_COLOR } from "./discord.js";
 import { REGIONS, escapeMarkdown, regionOf, shownTier } from "./site.js";
 
 export const PAGE_SIZE = 15;
@@ -77,7 +77,7 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
     title: `${info.label} Leaderboard — Top ${to}`,
     url: site.leaderboardUrl(region),
     description,
-    color: RED,
+    color: EMBED_COLOR,
     footer: {
       text: live ? `Live · updates every ${refreshMinutes} min · the buttons show you your own copy · Updated` : `Page ${page}/${MAX_PAGES} · Updated`,
     },
