@@ -82,9 +82,21 @@ npm install
 npm run deploy
 ```
 
+`deploy` first applies any new migration in `migrations/` to the live database, then deploys the Worker, so the new tables are there when the new code runs. (`npm run db:migrate:remote` applies the migrations without deploying; `npm run db:migrate:local` does the local database.) A schema change is a new file in `migrations/`; never edit one that was already merged.
+
 Changed the commands (`scripts/commands.js`)? Also `npm run register`: it asks for the bot token and puts the commands in the Genji Ball server (`DISCORD_GUILD_ID`), where they show up at once.
 
-First time only, or after adding a table to `schema.sql`: `npm run db:setup`, **before** `npm run deploy`, so the new tables are there when the new code runs.
+### One-time step for the existing production database
+
+The live database was built from the old `schema.sql`, before migrations, so it already has every table `0001_initial.sql` creates. Run this **once**, before the first `npm run deploy` that has migrations. It creates wrangler's `d1_migrations` table and records `0001_initial.sql` as applied, so `deploy` skips it:
+
+```
+npx wrangler whoami
+npx wrangler d1 execute genjiball-discord-bot --remote --command "CREATE TABLE IF NOT EXISTS d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL); INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0001_initial.sql');"
+npx wrangler d1 migrations list DB --remote
+```
+
+`whoami` must show the Genji Ball account (`c212ad20cc4f4b5382766735f57b91c3`). `migrations list` should then list only the migrations after `0001_initial.sql` (none, or `0002_drop_old_tables.sql` and later), which `npm run deploy` applies. A new database (not production) skips this step: `npm run db:migrate:remote` or `npm run deploy` creates everything.
 
 Deploy only to the Genji Ball Cloudflare account, the one genjiball.us is on: check `npx wrangler whoami` first, never a personal account.
 
@@ -94,7 +106,7 @@ The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secre
 
 1. Discord Developer Portal → New Application. Copy the **Application ID** and **Public Key** into `wrangler.toml`. On **Bot**, Reset Token and keep it.
 2. Invite it: `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=268487680` (View Channels, Send Messages, Embed Links, Attach Files, for the tourney pictures, and Manage Roles, for the rank roles. It only deletes its own posts, which needs nothing more). On **Bot**, turn on **Server Members Intent**.
-3. `npx wrangler login`, `npx wrangler d1 create genjiball-discord-bot` (paste the id into `wrangler.toml`), `npm run db:setup`, `npx wrangler secret put DISCORD_TOKEN`, `npm run deploy`.
+3. `npx wrangler login`, `npx wrangler d1 create genjiball-discord-bot` (paste the id into `wrangler.toml`), `npm run db:migrate:remote`, `npx wrangler secret put DISCORD_TOKEN`, `npm run deploy`.
 4. Developer Portal → General Information → **Interactions Endpoint URL**: the address `deploy` printed, plus `/interactions`. Save.
 5. `npm run register`.
 
@@ -119,7 +131,7 @@ Secrets: `DISCORD_TOKEN` and `SITE_TOKEN` (optional). Bindings: `DB` (D1) and `B
 
 The cron runs every minute and does the work above on its own schedule. The Worker also answers `POST /interactions` (Discord), `GET /titles` (who has a title, for genjiball.us) and `GET /` (a status line).
 
-The database (`schema.sql`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are), `result_posts` (match result posts), `links` (`/gr link`) and `titles` (God and Demigod at the last rank check).
+The database (`migrations/`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are), `result_posts` (match result posts), `links` (`/gr link`) and `titles` (God and Demigod at the last rank check).
 
 ## Good to know
 

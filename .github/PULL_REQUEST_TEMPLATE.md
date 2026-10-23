@@ -7,7 +7,7 @@
 - [ ] `npm test` passes
 - [ ] New behaviour has tests
 - [ ] Settings are `[vars]` in `wrangler.toml`, not hard-coded; the token stays a secret
-- [ ] Schema changes are in `schema.sql` and safe to run again on the live database
+- [ ] Schema changes are a new file in `migrations/` (no merged migration edited), and the README's table list is updated
 - [ ] Changed commands or options: `scripts/commands.js` updated, and `npm run register` noted below
 - [ ] README / AGENTS.md updated if commands, settings, secrets, routes, tables or setup changed
 

@@ -1,6 +1,8 @@
 name = "genjiball-discord-bot"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
+# The Genji Ball Cloudflare account (same as genjiball.us). Pinned so a deploy can never go to a personal account.
+account_id = "c212ad20cc4f4b5382766735f57b91c3"
 
 # Every minute: tournament confirm DMs and lists. Then, by the minute: every TOURNEY_REFRESH_MINUTES the
 # site's new or changed tourneys; every 5 the tournament match results; every LEADERBOARD_REFRESH_MINUTES
@@ -12,6 +14,8 @@ crons = ["* * * * *"]
 binding = "DB"
 database_name = "genjiball-discord-bot"
 database_id = "436cac8d-7325-44c7-9d83-cb22cbe17e86"
+# The schema: migrations/*.sql, applied by `npm run deploy` (or `npm run db:migrate:remote`).
+migrations_dir = "migrations"
 
 # Cloudflare's browser: a picture of each finished tourney's page for TOURNEY_RESULTS_CHANNEL_ID
 # (src/screenshot.js). Needs a compatibility_date of 2026-03-24 or later.

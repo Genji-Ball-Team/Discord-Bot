@@ -1,8 +1,10 @@
--- The bot's own database (D1 "genjiball-discord-bot"). Safe to run again: it only adds what's missing.
---   npm run db:setup
+-- The bot's own database (D1 "genjiball-discord-bot"): the first migration, the schema as production has it.
+-- Applied by `wrangler d1 migrations apply` (`npm run deploy`, or `npm run db:migrate:local` in a test). Never edit it once merged: add 0002_....sql.
+-- Production also still has two leftover tables, `tourneys` and `reminders` (and the index `tourneys_due`)
+-- from an older version of the bot. Nothing reads them: not here, and 0002 drops them.
 
 -- The site's tourneys the bot has posted. `id` is the tourney's id on genjiball.us.
-CREATE TABLE IF NOT EXISTS tournaments (
+CREATE TABLE tournaments (
   id INTEGER PRIMARY KEY,
   region TEXT NOT NULL,                -- 'eu' or 'na'
   name TEXT NOT NULL,
@@ -16,11 +18,11 @@ CREATE TABLE IF NOT EXISTS tournaments (
   created_at INTEGER NOT NULL,
   signups INTEGER                      -- the site's sign-up count the post shows (with SITE_TOKEN), page sign-ups included
 );
-CREATE INDEX IF NOT EXISTS tournaments_phase ON tournaments (phase, starts_at);
+CREATE INDEX tournaments_phase ON tournaments (phase, starts_at);
 
 -- Who registered. `confirmed`: pressed Confirm in the DM, or registered during the confirm minutes.
 -- With SITE_TOKEN they're on the site's sign-up list too, the one list both show.
-CREATE TABLE IF NOT EXISTS entrants (
+CREATE TABLE entrants (
   tournament_id INTEGER NOT NULL,
   user_id TEXT NOT NULL,
   name TEXT NOT NULL,                  -- the in-game name they gave (before the site sync: their server name)
@@ -30,16 +32,16 @@ CREATE TABLE IF NOT EXISTS entrants (
   on_site INTEGER NOT NULL DEFAULT 0,  -- 1: the site has their sign-up; 0: the cron still has to send it; 2: the site refused the name
   PRIMARY KEY (tournament_id, user_id)
 );
-CREATE INDEX IF NOT EXISTS entrants_dm ON entrants (tournament_id, dm_status);
+CREATE INDEX entrants_dm ON entrants (tournament_id, dm_status);
 
 -- DM channel per user, so a DM costs one Discord request instead of two.
-CREATE TABLE IF NOT EXISTS dm_channels (
+CREATE TABLE dm_channels (
   user_id TEXT PRIMARY KEY,
   channel_id TEXT NOT NULL
 );
 
 -- Live leaderboards (/gr setup leaderboard): one message per channel, kept up to date by the cron.
-CREATE TABLE IF NOT EXISTS boards (
+CREATE TABLE boards (
   channel_id TEXT PRIMARY KEY,
   guild_id TEXT NOT NULL,
   message_id TEXT NOT NULL UNIQUE,
@@ -47,14 +49,14 @@ CREATE TABLE IF NOT EXISTS boards (
 );
 
 -- Small settings the bot keeps between runs, like where it is in the site's match feed.
-CREATE TABLE IF NOT EXISTS bot_state (
+CREATE TABLE bot_state (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 
 -- Tournament results posted in RESULTS_CHANNEL_ID, one per match. `shown`: what the post shows,
 -- so it's only edited when that changes.
-CREATE TABLE IF NOT EXISTS result_posts (
+CREATE TABLE result_posts (
   match_id INTEGER PRIMARY KEY,
   channel_id TEXT NOT NULL,
   message_id TEXT NOT NULL,

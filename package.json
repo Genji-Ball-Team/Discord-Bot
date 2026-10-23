@@ -8,9 +8,10 @@
     "node": ">=22.5"
   },
   "scripts": {
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "register": "node scripts/register.mjs",
-    "db:setup": "wrangler d1 execute genjiball-discord-bot --remote --file=schema.sql",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "test": "node --test test/*.test.js"
   },
   "devDependencies": {
