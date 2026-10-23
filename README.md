@@ -96,7 +96,7 @@ npx wrangler d1 execute genjiball-discord-bot --remote --command "CREATE TABLE I
 npx wrangler d1 migrations list DB --remote
 ```
 
-`whoami` must show the Genji Ball account (`c212ad20cc4f4b5382766735f57b91c3`). `migrations list` should then say "No migrations to apply". A new database (not production) skips this step: `npm run db:migrate:remote` or `npm run deploy` creates everything.
+`whoami` must show the Genji Ball account (`c212ad20cc4f4b5382766735f57b91c3`). `migrations list` should then list only the migrations after `0001_initial.sql` (none, or `0002_drop_old_tables.sql` and later), which `npm run deploy` applies. A new database (not production) skips this step: `npm run db:migrate:remote` or `npm run deploy` creates everything.
 
 Deploy only to the Genji Ball Cloudflare account, the one genjiball.us is on: check `npx wrangler whoami` first, never a personal account.
 
