@@ -821,10 +821,19 @@ test("a request signed long ago is refused", async () => {
 
 // ---------- slow or busy APIs ----------
 
-/** A fetch that never answers: it only ends when the request's signal gives up. */
+/**
+ * A fetch that never answers: it only ends when the request's signal gives up. AbortSignal.timeout's
+ * timer doesn't keep Node running, so a timer of its own does until then.
+ */
 function hangingFetch() {
   globalThis.fetch = (input, init) =>
-    new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
+    new Promise((_, reject) => {
+      const alive = setInterval(() => {}, 1000);
+      init.signal.addEventListener("abort", () => {
+        clearInterval(alive);
+        reject(init.signal.reason);
+      });
+    });
 }
 
 test("a site that doesn't answer in time fails like a site error, and autocomplete shows nothing", async () => {
