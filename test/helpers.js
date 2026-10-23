@@ -70,7 +70,10 @@ export function installFetch({
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url ?? String(input));
     const method = init.method ?? "GET";
-    const body = init.body ? JSON.parse(init.body) : undefined;
+    // A file upload (multipart): the message is its payload_json, the files are noted under `files`.
+    const form = init.body instanceof FormData ? init.body : null;
+    const body = form ? JSON.parse(form.get("payload_json")) : init.body ? JSON.parse(init.body) : undefined;
+    const files = form ? [...form.entries()].filter(([k]) => k.startsWith("files[")).map(([, f]) => ({ name: f.name, type: f.type, size: f.size })) : undefined;
     const reply = (data, status = 200) => new Response(data === null ? null : JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 
     if (url.hostname === "genjiball.us") {
@@ -182,7 +185,7 @@ export function installFetch({
 
     if (url.hostname === "discord.com") {
       const path = url.pathname.replace("/api/v10", "");
-      calls.push({ method, path, body, query: url.search });
+      calls.push({ method, path, body, query: url.search, ...(files && { files }) });
       const down = discordDown({ method, path });
       if (down === 429) return reply({ message: "You are being rate limited.", retry_after: 0 }, 429);
       if (down) return reply({ message: "Internal Server Error" }, 500);
@@ -227,4 +230,20 @@ export const STAFF = { user: { id: "fealthy-id" }, roles: ["staff-role"], permis
 export function fakeCtx() {
   const pending = [];
   return { waitUntil: (p) => pending.push(p), done: () => Promise.all(pending) };
+}
+
+/**
+ * Cloudflare's browser (the BROWSER binding): its screenshot quick action answers a PNG, or a 500
+ * while `down`. Each call's options are kept in `shots`.
+ */
+export function fakeBrowser({ down = false } = {}) {
+  const shots = [];
+  return {
+    shots,
+    quickAction: async (action, options) => {
+      shots.push({ action, ...options });
+      if (down) return new Response("browser error", { status: 500 });
+      return new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { headers: { "Content-Type": "image/png" } });
+    },
+  };
 }

@@ -9,7 +9,7 @@ import { Discord } from "../src/discord.js";
 import { listMessages, runTournaments, signup } from "../src/tournament.js";
 import { resultsPost } from "../src/results.js";
 import { minutes } from "../src/time.js";
-import { ENV, STAFF, fakeCtx, fakeD1, installFetch } from "./helpers.js";
+import { ENV, STAFF, fakeBrowser, fakeCtx, fakeD1, installFetch } from "./helpers.js";
 
 // ---------- signed requests, as Discord sends them ----------
 
@@ -228,6 +228,60 @@ test("a tourney made on the site, from its sign-up post to the final list", asyn
   await cron(e, START + 70 * 60_000);
   assert.equal(posts(calls, "signups").filter((p) => p.body.embeds?.[0]?.title?.includes("standings")).length, 1);
   assert.deepEqual(siteWrites(), []);
+});
+
+/** A tourney that started an hour ago, marked done on the site now. */
+async function finishedTourney(e, siteTourneys) {
+  const t = siteTourney(siteTourneys, { name: "EU #FFA 002" });
+  await cron(e, NOW);
+  await cron(e, START);
+  Object.assign(t, { status: "done", lobbies: [{ label: "Lobby 1", verified: true, standings: [{ place: 1, name: "Fealthy", wins: 9, kills: 37 }] }] });
+  return t;
+}
+
+test("a finished tourney: a picture of its page and the link in the results channel, once", async () => {
+  const browser = fakeBrowser();
+  const e = env({ BROWSER: browser });
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = await finishedTourney(e, siteTourneys);
+  await cron(e, START + 60 * 60_000);
+  const url = `https://genjiball.us/tourney?id=${t.id}`;
+  assert.deepEqual(browser.shots.map((s) => [s.action, s.url, s.selector]), [["screenshot", url, "main"]]);
+  const [post] = posts(calls, "results");
+  assert.deepEqual(post.files, [{ name: `tourney-${t.id}.png`, type: "image/png", size: 4 }]);
+  assert.equal(post.body.content, `**EU \\#FFA 002**: ${url}`);
+  assert.equal(post.body.flags, 4); // no link preview under the picture
+  assert.deepEqual(post.body.allowed_mentions, { parse: [] });
+  // The standings still go under the list, and nothing is posted again.
+  assert.match(posts(calls, "signups").at(-1).body.embeds[0].title, /standings/);
+  await cron(e, START + 70 * 60_000);
+  assert.equal(posts(calls, "results").length, 1);
+  assert.equal(browser.shots.length, 1);
+});
+
+test("no picture when the browser fails: the link goes alone", async () => {
+  const e = env({ BROWSER: fakeBrowser({ down: true }) });
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = await finishedTourney(e, siteTourneys);
+  const error = mock.method(console, "error", () => {});
+  await cron(e, START + 60 * 60_000);
+  error.mock.restore();
+  const [post] = posts(calls, "results");
+  assert.equal(post.files, undefined);
+  assert.equal(post.body.content, `**EU \\#FFA 002**: https://genjiball.us/tourney?id=${t.id}`);
+});
+
+test("a finished tourney with no results channel: no picture taken", async () => {
+  const browser = fakeBrowser();
+  const e = env({ BROWSER: browser, RESULTS_CHANNEL_ID: "" });
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  await finishedTourney(e, siteTourneys);
+  await cron(e, START + 60 * 60_000);
+  assert.equal(browser.shots.length, 0);
+  assert.equal(posts(calls, "results").length, 0);
 });
 
 test("cancelled on the site: the post is crossed out, no DMs or list", async () => {

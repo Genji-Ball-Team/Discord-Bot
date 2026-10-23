@@ -7,7 +7,8 @@
 //    open, and registering now confirms at once.
 // 3. `started` (at the start): the sign-up post is deleted and the list of confirmed players is
 //    posted in its channel as @mentions that notify nobody. Later, when an admin marks it done on
-//    the site, the standings are posted under the list.
+//    the site, the standings are posted under the list, and a picture of the tourney's page on the
+//    site with its link in RESULTS_CHANNEL_ID.
 //
 // A tourney renamed, moved or cancelled on the site is updated here on the next sync (every
 // TOURNEY_REFRESH_MINUTES).
@@ -18,11 +19,15 @@
 // sent on the sync. Without SITE_TOKEN the bot keeps its own list, as before.
 
 import { NO_PINGS, RED, lostAccess } from "./discord.js";
+import { tourneyScreenshot } from "./screenshot.js";
 import { REGIONS, escapeMarkdown, signsUp } from "./site.js";
 import { discordTime, minutes } from "./time.js";
 
 export const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
 const signupChannel = (env) => (env.TOURNEY_CHANNEL_ID ?? "").trim();
+const resultsChannel = (env) => (env.RESULTS_CHANNEL_ID ?? "").trim();
+/** Discord's message flag: no link preview under the picture. */
+const SUPPRESS_EMBEDS = 1 << 2;
 const MESSAGE_MAX = 2000;
 /** How long after the start the bot still looks for the standings on the site. */
 const RESULTS_WINDOW_SECONDS = 3 * 24 * 3600;
@@ -632,6 +637,28 @@ async function postStandings(env, discord, site, t) {
       return { id: "gone" };
     });
   await env.DB.prepare("UPDATE tournaments SET results_message_id = ? WHERE id = ?").bind(message.id, t.id).run();
+  await postResultsPicture(env, discord, site, data.tourney).catch((e) => console.error(`results picture for tourney ${t.id}`, e));
+}
+
+/**
+ * The finished tourney in RESULTS_CHANNEL_ID: a picture of its page on the site, as staff used to
+ * post by hand, and the link. Made once, with the standings: when the picture can't be taken, the
+ * link goes alone.
+ */
+async function postResultsPicture(env, discord, site, t) {
+  const channelId = resultsChannel(env);
+  if (!channelId) return;
+  const url = site.tourneyUrl(t.id);
+  const message = { content: `**${escapeMarkdown(t.name)}**: ${url}`, flags: SUPPRESS_EMBEDS, allowed_mentions: NO_PINGS };
+  const image = await tourneyScreenshot(env, url).catch((e) => {
+    console.error(`can't take a picture of ${url}`, e);
+    return null;
+  });
+  const send = image ? discord.sendFile(channelId, message, { name: `tourney-${t.id}.png`, type: "image/png", data: image }) : discord.sendMessage(channelId, message);
+  await send.catch((e) => {
+    if (!lostAccess(e)) throw e;
+    console.error(`can't post the results picture in ${channelId}`, e);
+  });
 }
 
 export async function runTournaments(env, discord, site, budget, nowMs = Date.now()) {
@@ -648,6 +675,7 @@ export async function runTournaments(env, discord, site, budget, nowMs = Date.no
     results.push(...started.results);
   }
 
+  // 4: the most a tourney takes, its standings (the site, the post, the picture and its upload).
   for (const t of results) {
     if (budget() < 4) return;
     if (t.phase === "open") {

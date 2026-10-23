@@ -1,5 +1,6 @@
 // Talking to Discord: checking that a request really comes from Discord, and the few REST calls the
-// bot makes (post, edit and delete messages, open DMs, read the members and change their rank roles).
+// bot makes (post, edit and delete messages, upload a picture, open DMs, read the members and change
+// their rank roles).
 
 const API = "https://discord.com/api/v10";
 
@@ -71,9 +72,11 @@ export class Discord {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (this.used >= this.budget) throw new DiscordError(0, "out of request budget for this run");
       this.used++;
-      const headers = { "Content-Type": "application/json" };
+      // A file upload is multipart: fetch sets its Content-Type, boundary included.
+      const form = body instanceof FormData;
+      const headers = form ? {} : { "Content-Type": "application/json" };
       if (auth) headers.Authorization = `Bot ${this.token}`;
-      const res = await fetch(API + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      const res = await fetch(API + path, { method, headers, body: body === undefined || form ? body : JSON.stringify(body) });
       if (res.status === 429 && attempt === 0) {
         const info = await res.json().catch(() => ({}));
         const wait = Math.min(Number(info.retry_after ?? 1), 5);
@@ -94,6 +97,14 @@ export class Discord {
 
   sendMessage(channelId, message) {
     return this.call("POST", `/channels/${channelId}/messages`, message);
+  }
+
+  /** A message with one file attached: `file` is `{ name, type, data }`, `data` the bytes. */
+  sendFile(channelId, message, file) {
+    const form = new FormData();
+    form.set("payload_json", JSON.stringify({ ...message, attachments: [{ id: 0, filename: file.name }] }));
+    form.set("files[0]", new Blob([file.data], { type: file.type }), file.name);
+    return this.call("POST", `/channels/${channelId}/messages`, form);
   }
 
   editMessage(channelId, messageId, message) {

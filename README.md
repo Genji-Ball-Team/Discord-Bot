@@ -23,7 +23,7 @@ Admins make tourneys on **genjiball.us** (the admin page), with their lobbies an
 1. **The post.** Within `TOURNEY_REFRESH_MINUTES` (5) of a tourney being made on the site, the bot posts its sign-up in `TOURNEY_CHANNEL_ID`: name, start time in each reader's own time zone, region and the sign-up count, with **Register**, **Unregister** and **👥 Who's signed up**. It never pings anyone. Each button answers privately. **Register** asks for your in-game name (your server name filled in) and signs you up on the site too: see [One list with the site](#one-list-with-the-site).
 2. **5 minutes before** (`CONFIRM_MINUTES`), everyone registered gets a DM: "⏰ Tournament starting in 5 minutes" with a **Confirm** button. Anyone who doesn't press it isn't playing. Register stays open, and registering now confirms at once. Players with DMs closed never get the button, so they're out.
 3. **At the start**, the sign-up post is deleted and the list of confirmed players is posted as @mentions that notify nobody, ending "Hosts: split the lobbies from this list."
-4. When an admin marks the tourney **done** on the site (with lobby standings), the bot posts the standings under the list.
+4. When an admin marks the tourney **done** on the site (with lobby standings), the bot posts the standings under the list, and a picture of the tourney's page on the site with its link in `RESULTS_CHANNEL_ID` (see below).
 
 Changes on the site follow within 5 minutes: a new name or start time updates the post (moved later during the 5 confirm minutes: back to sign-ups, and the DMs go out again before the new start), and a cancelled or deleted tourney's post is crossed out. Right before posting the list, the bot checks the site once more, so a last-minute move or cancel is caught too.
 
@@ -45,6 +45,10 @@ Without `SITE_TOKEN` the bot keeps its own list, as before, and doesn't use the 
 Every tournament match the site rates is posted in `RESULTS_CHANNEL_ID`, one post per lobby's match: the tourney and lobby, region, rounds and date, then each player ranked as in the standings (most wins, ties broken by kills) with their wins, kills and rating before → after with the change. No pings, no emojis, a red side line like the other posts.
 
 The bot follows the site's match feed (checked every 5 minutes; the site rates every 10), so a result shows up about 10–15 minutes after the match is uploaded. A longer copy of the match edits the post, and a voided match's post is deleted. A later recompute of the ratings doesn't change a post that's already up. Matches from before the bot started following the feed are never posted.
+
+### The finished tourney as a picture
+
+When a tourney is marked done, the bot also posts a picture of its page on genjiball.us (the title, date, region and every lobby's winner and standings table, as on the site) in `RESULTS_CHANNEL_ID`, with the link under it. Cloudflare's browser takes it: the `[browser]` binding in `wrangler.toml` (Browser Run's screenshot quick action, `src/screenshot.js`). No token or setup beyond deploying. The free plan's 10 browser minutes a day are plenty: a picture takes a few seconds. If the picture can't be taken, the link is posted alone. The picture is taken once, when the standings come in: a lobby verified later isn't redrawn. The browser runs in UTC, so the start time on the picture is UTC.
 
 ## Rank roles
 
