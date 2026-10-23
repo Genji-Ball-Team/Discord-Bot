@@ -8,7 +8,7 @@
 // 3. `started` (at the start): the sign-up post is deleted and the list of confirmed players is
 //    posted in its channel as @mentions that notify nobody. Later, when an admin marks it done on
 //    the site, the standings are posted under the list, and a picture of the tourney's page on the
-//    site with its link in RESULTS_CHANNEL_ID.
+//    site with its link in TOURNEY_RESULTS_CHANNEL_ID.
 //
 // A tourney renamed, moved or cancelled on the site is updated here on the next sync (every
 // TOURNEY_REFRESH_MINUTES).
@@ -25,9 +25,9 @@ import { discordTime, minutes } from "./time.js";
 
 export const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
 const signupChannel = (env) => (env.TOURNEY_CHANNEL_ID ?? "").trim();
-const resultsChannel = (env) => (env.RESULTS_CHANNEL_ID ?? "").trim();
-/** Discord's message flag: no link preview under the picture. */
-const SUPPRESS_EMBEDS = 1 << 2;
+const tourneyResultsChannel = (env) => (env.TOURNEY_RESULTS_CHANNEL_ID ?? "").trim();
+/** The finished tourney's side line: dark green with a hint of blue. */
+const TOURNEY_RESULTS_COLOR = 0x0e7a62;
 const MESSAGE_MAX = 2000;
 /** How long after the start the bot still looks for the standings on the site. */
 const RESULTS_WINDOW_SECONDS = 3 * 24 * 3600;
@@ -641,23 +641,32 @@ async function postStandings(env, discord, site, t) {
 }
 
 /**
- * The finished tourney in RESULTS_CHANNEL_ID: a picture of its page on the site, as staff used to
- * post by hand, and the link. Made once, with the standings: when the picture can't be taken, the
- * link goes alone.
+ * The finished tourney in TOURNEY_RESULTS_CHANNEL_ID: an embed with its name, its link and a picture
+ * of its page on the site, as staff used to post by hand. Made once, with the standings: when the
+ * picture can't be taken, the embed goes without it.
  */
+export function tourneyResultsPost(site, t, picture) {
+  const url = site.tourneyUrl(t.id);
+  const embed = { title: t.name.slice(0, 256), url, description: url, color: TOURNEY_RESULTS_COLOR };
+  if (picture) embed.image = { url: `attachment://${picture}` };
+  return { embeds: [embed], allowed_mentions: NO_PINGS };
+}
+
 async function postResultsPicture(env, discord, site, t) {
-  const channelId = resultsChannel(env);
+  const channelId = tourneyResultsChannel(env);
   if (!channelId) return;
   const url = site.tourneyUrl(t.id);
-  const message = { content: `**${escapeMarkdown(t.name)}**: ${url}`, flags: SUPPRESS_EMBEDS, allowed_mentions: NO_PINGS };
   const image = await tourneyScreenshot(env, url).catch((e) => {
     console.error(`can't take a picture of ${url}`, e);
     return null;
   });
-  const send = image ? discord.sendFile(channelId, message, { name: `tourney-${t.id}.png`, type: "image/png", data: image }) : discord.sendMessage(channelId, message);
+  const name = `tourney-${t.id}.png`;
+  const send = image
+    ? discord.sendFile(channelId, tourneyResultsPost(site, t, name), { name, type: "image/png", data: image })
+    : discord.sendMessage(channelId, tourneyResultsPost(site, t, null));
   await send.catch((e) => {
     if (!lostAccess(e)) throw e;
-    console.error(`can't post the results picture in ${channelId}`, e);
+    console.error(`can't post the tourney results in ${channelId}`, e);
   });
 }
 
