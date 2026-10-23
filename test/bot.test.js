@@ -251,7 +251,7 @@ test("a finished tourney: an embed with its link and a picture of its page in th
   const [post] = posts(calls, "tourney-results");
   assert.deepEqual(post.files, [{ name: `tourney-${t.id}.png`, type: "image/png", size: 4 }]);
   assert.deepEqual(post.body.embeds, [
-    { title: "EU #FFA 002", url, description: url, color: 0x0e7a62, image: { url: `attachment://tourney-${t.id}.png` } },
+    { title: "EU #FFA 002", url, description: url, color: 0x1c8888, image: { url: `attachment://tourney-${t.id}.png` } },
   ]);
   assert.deepEqual(post.body.allowed_mentions, { parse: [] });
   // The standings still go under the list, and nothing is posted again.
@@ -648,7 +648,7 @@ test("the results post: ranked by place, wins, kills and the rating change, no e
   const embed = message.embeds[0];
   assert.equal(embed.title, "EU FFA Tournament · Lobby 1");
   assert.equal(embed.url, "https://genjiball.us/match?id=900");
-  assert.equal(embed.color, 0xed4245);
+  assert.equal(embed.color, 0x1c8888);
   assert.equal(
     embed.description,
     "EU · 19 rounds · <t:1791661200:D>\n\n" +

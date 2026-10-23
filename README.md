@@ -42,13 +42,13 @@ Without `SITE_TOKEN` the bot keeps its own list, as before, and doesn't use the 
 
 ## Tournament results
 
-Every tournament match the site rates is posted in `RESULTS_CHANNEL_ID`, one post per lobby's match: the tourney and lobby, region, rounds and date, then each player ranked as in the standings (most wins, ties broken by kills) with their wins, kills and rating before → after with the change. No pings, no emojis, a red side line like the other posts.
+Every tournament match the site rates is posted in `RESULTS_CHANNEL_ID`, one post per lobby's match: the tourney and lobby, region, rounds and date, then each player ranked as in the standings (most wins, ties broken by kills) with their wins, kills and rating before → after with the change. No pings, no emojis, a side line in the bot role's colour (#1c8888) like the other posts.
 
 The bot follows the site's match feed (checked every 5 minutes; the site rates every 10), so a result shows up about 10–15 minutes after the match is uploaded. A longer copy of the match edits the post, and a voided match's post is deleted. A later recompute of the ratings doesn't change a post that's already up. Matches from before the bot started following the feed are never posted.
 
 ### The finished tourney as a picture
 
-When a tourney is marked done, the bot also posts it in `TOURNEY_RESULTS_CHANNEL_ID` (the ranked results channel, where the rank-ups go too): an embed with a dark green side line, the tourney's name and link, and a picture of its page on genjiball.us (the title, date, region and every lobby's winner and standings table, as on the site). Cloudflare's browser takes it: the `[browser]` binding in `wrangler.toml` (Browser Run's screenshot quick action, `src/screenshot.js`). No token or setup beyond deploying. The free plan's 10 browser minutes a day are plenty: a picture takes a few seconds. If the picture can't be taken, the embed is posted without it. The picture is taken once, when the standings come in: a lobby verified later isn't redrawn. The browser runs in UTC, so the start time on the picture is UTC.
+When a tourney is marked done, the bot also posts it in `TOURNEY_RESULTS_CHANNEL_ID` (the ranked results channel, where the rank-ups go too): an embed with the same side line as the bot's other posts, the tourney's name and link, and a picture of its page on genjiball.us (the title, date, region and every lobby's winner and standings table, as on the site). Cloudflare's browser takes it: the `[browser]` binding in `wrangler.toml` (Browser Run's screenshot quick action, `src/screenshot.js`). No token or setup beyond deploying. The free plan's 10 browser minutes a day are plenty: a picture takes a few seconds. If the picture can't be taken, the embed is posted without it. The picture is taken once, when the standings come in: a lobby verified later isn't redrawn. The browser runs in UTC, so the start time on the picture is UTC.
 
 ## Rank roles
 
