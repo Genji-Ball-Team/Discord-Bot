@@ -93,10 +93,33 @@ The bot token is a secret on Cloudflare, never in this repo: `npx wrangler secre
 ## Setting it up from scratch
 
 1. Discord Developer Portal → New Application. Copy the **Application ID** and **Public Key** into `wrangler.toml`. On **Bot**, Reset Token and keep it.
-2. Invite it: `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=268454912` (View Channels, Send Messages, Embed Links and Manage Roles, for the rank roles. It only deletes its own posts, which needs nothing more). On **Bot**, turn on **Server Members Intent**.
+2. Invite it: `https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=268487680` (View Channels, Send Messages, Embed Links, Attach Files, for the tourney pictures, and Manage Roles, for the rank roles. It only deletes its own posts, which needs nothing more). On **Bot**, turn on **Server Members Intent**.
 3. `npx wrangler login`, `npx wrangler d1 create genjiball-discord-bot` (paste the id into `wrangler.toml`), `npm run db:setup`, `npx wrangler secret put DISCORD_TOKEN`, `npm run deploy`.
 4. Developer Portal → General Information → **Interactions Endpoint URL**: the address `deploy` printed, plus `/interactions`. Save.
 5. `npm run register`.
+
+## Settings and data
+
+Settings are `[vars]` in `wrangler.toml` (each has a comment there). Empty means the feature is off.
+
+| Setting | What |
+|---|---|
+| `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_GUILD_ID` | The app, and the server `npm run register` puts the commands in |
+| `SITE_URL` | The website the bot reads (genjiball.us) |
+| `STAFF_ROLE_ID` | The Staff role |
+| `TOURNEY_CHANNEL_ID` | Sign-up posts and lists |
+| `RESULTS_CHANNEL_ID` | Tournament match results |
+| `TOURNEY_RESULTS_CHANNEL_ID` | A finished tourney's picture |
+| `RANKUP_CHANNEL_ID` | Rank-up posts |
+| `RANK_ROLES`, `UNRANKED_ROLE_ID` | The rank roles, lowest tier first, and the role below the first tier |
+| `GOD_ROLE_IDS`, `DEMIGOD_ROLE_IDS` | The titles, `region=role id` |
+| `TOURNEY_REFRESH_MINUTES`, `CONFIRM_MINUTES`, `LEADERBOARD_REFRESH_MINUTES`, `RANK_REFRESH_MINUTES` | Minutes (1 to 60, 5 if missing) |
+
+Secrets: `DISCORD_TOKEN` and `SITE_TOKEN` (optional). Bindings: `DB` (D1) and `BROWSER`.
+
+The cron runs every minute and does the work above on its own schedule. The Worker also answers `POST /interactions` (Discord), `GET /titles` (who has a title, for genjiball.us) and `GET /` (a status line).
+
+The database (`schema.sql`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are), `result_posts` (match result posts), `links` (`/gr link`) and `titles` (God and Demigod at the last rank check).
 
 ## Good to know
 

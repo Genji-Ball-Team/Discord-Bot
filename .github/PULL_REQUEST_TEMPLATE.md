@@ -9,7 +9,7 @@
 - [ ] Settings are `[vars]` in `wrangler.toml`, not hard-coded; the token stays a secret
 - [ ] Schema changes are in `schema.sql` and safe to run again on the live database
 - [ ] Changed commands or options: `scripts/commands.js` updated, and `npm run register` noted below
-- [ ] README / AGENTS.md updated if commands, config or setup changed
+- [ ] README / AGENTS.md updated if commands, settings, secrets, routes, tables or setup changed
 
 ## How did you test it?
 

@@ -21,6 +21,7 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 - **Cron.** Every minute: the tourneys' Confirm DMs and lists (`src/tournament.js`); every `TOURNEY_REFRESH_MINUTES` the site's new or changed tourneys; every 5 minutes the tournament match results (`src/results.js`); every `LEADERBOARD_REFRESH_MINUTES` the live leaderboards; every `RANK_REFRESH_MINUTES` the rank roles (`src/ranks.js`).
 - **Tourneys** are made on the site (lobbies, hosts, standings). The bot posts each one with Register / Unregister buttons, DMs the registered players a Confirm button `CONFIRM_MINUTES` before the start, then replaces the post with the list of confirmed players. With `SITE_TOKEN`, the sign-ups are one list with the site's (`signup`, README "One list with the site"): Register asks for the in-game name and signs the player up there too, and `entrants` keeps what only Discord has (the user, Confirm, the DM). Without it, the bot keeps its own list.
 - **Rank roles** (`src/ranks.js`). Staff link members to their site player (`/gr link`); every `RANK_REFRESH_MINUTES` the bot reads the members and their tiers and keeps one rank role on each linked member, and notes who has a God or Demigod role (the 1v1 tourney's titles) for the leaderboards. The site reads those from the bot's `GET /titles`, through a service binding.
+- **Tourney pictures** (`src/screenshot.js`). When a tourney is marked done, or with `/gr results`, Cloudflare's browser (the `BROWSER` binding) takes a picture of its site page, posted in `TOURNEY_RESULTS_CHANNEL_ID`.
 - **The site.** Every number comes from genjiball.us's public API (`src/site.js`), documented in genjiball-ranked's [`docs/api.md`](https://github.com/Genji-Ball-Team/genjiball-ranked/blob/main/docs/api.md) ("Site"). The only writes are the tourney sign-ups, through the bot's own routes ("Discord bot sign-ups"), behind `SITE_TOKEN`.
 
 ## Limits
@@ -39,6 +40,7 @@ The tests use an in-memory D1 (`node:sqlite`) and fake Discord and site APIs beh
 ## Config and data
 
 - Settings are `[vars]` in `wrangler.toml`, read through a small helper with a default. The bot token (`DISCORD_TOKEN`) and the site's (`SITE_TOKEN`) are `wrangler secret`s, never in the repo.
+- Every setting, secret, route and table is listed in the README ("Settings and data"): keep it in step.
 - The schema is `schema.sql`, run on the live database with `npm run db:setup`. It must stay safe to run again: `CREATE TABLE IF NOT EXISTS`. A change to an existing table is a new `ALTER TABLE` statement run by hand on the live database; say so in the PR.
 
 ## Deploying

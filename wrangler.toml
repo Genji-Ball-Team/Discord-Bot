@@ -2,8 +2,9 @@ name = "genjiball-discord-bot"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
-# Every minute: tournament confirm DMs and lists. Every TOURNEY_REFRESH_MINUTES: the site's new or
-# changed tourneys. Every LEADERBOARD_REFRESH_MINUTES: live leaderboards.
+# Every minute: tournament confirm DMs and lists. Then, by the minute: every TOURNEY_REFRESH_MINUTES the
+# site's new or changed tourneys; every 5 the tournament match results; every LEADERBOARD_REFRESH_MINUTES
+# the live leaderboards; every RANK_REFRESH_MINUTES the rank roles (`scheduled` in src/index.js).
 [triggers]
 crons = ["* * * * *"]
 

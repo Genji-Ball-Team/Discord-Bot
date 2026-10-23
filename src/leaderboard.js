@@ -6,8 +6,8 @@
 import { NO_PINGS, EMBED_COLOR } from "./discord.js";
 import { REGIONS, escapeMarkdown, regionOf, shownTier } from "./site.js";
 
-export const PAGE_SIZE = 20;
-export const MAX_PAGES = 5;
+const PAGE_SIZE = 20;
+const MAX_PAGES = 5;
 const API_PAGE_SIZE = 50;
 
 /** Players ranked `from`..`to`. */
@@ -33,7 +33,7 @@ function formatLines(players) {
 }
 
 /** The rest of the board without the titled players, numbered as if they weren't on it. */
-export function withoutTitled(players, titled) {
+function withoutTitled(players, titled) {
   const ids = new Set(titled.map((t) => t.id));
   return players.filter((p) => !ids.has(p.id)).map((p) => ({ ...p, rank: p.rank - titled.filter((t) => t.rank < p.rank).length }));
 }

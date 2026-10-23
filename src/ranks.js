@@ -11,9 +11,9 @@
 // one, for the leaderboards. The site reads them from `GET /titles` (genjiball-ranked
 // src/site/titles.ts), and `/gr leaderboard` from the site's `/api/titles`.
 
-import { NO_PINGS, lostAccess } from "./discord.js";
+import { MEMBERS_PAGE, NO_PINGS, lostAccess } from "./discord.js";
 import { escapeMarkdown, shownTier } from "./site.js";
-import { minutes } from "./time.js";
+import { minutes, setting } from "./time.js";
 
 export const rankMinutes = (env) => minutes(env.RANK_REFRESH_MINUTES);
 
@@ -25,19 +25,19 @@ const pairs = (value) =>
     .filter(([key, id]) => key && /^\d+$/.test(id ?? ""));
 
 /** RANK_ROLES, lowest tier first: `[{ label, roleId }]`, the labels as the site names its tiers. */
-export const rankRoles = (env) => pairs(env.RANK_ROLES).map(([label, roleId]) => ({ label, roleId }));
-const unrankedRole = (env) => (env.UNRANKED_ROLE_ID ?? "").trim();
-const rankupChannel = (env) => (env.RANKUP_CHANNEL_ID ?? "").trim();
-const guildOf = (env) => (env.DISCORD_GUILD_ID ?? "").trim();
+const rankRoles = (env) => pairs(env.RANK_ROLES).map(([label, roleId]) => ({ label, roleId }));
+const unrankedRole = (env) => setting(env, "UNRANKED_ROLE_ID");
+const rankupChannel = (env) => setting(env, "RANKUP_CHANNEL_ID");
+const guildOf = (env) => setting(env, "DISCORD_GUILD_ID");
 
 /** The title roles: `[{ title, region, roleId }]`, God before Demigod. */
-export const titleRoles = (env) =>
+const titleRoles = (env) =>
   [
     ["God", env.GOD_ROLE_IDS],
     ["Demigod", env.DEMIGOD_ROLE_IDS],
   ].flatMap(([title, value]) => pairs(value).map(([region, roleId]) => ({ title, region, roleId })));
 
-export const ranksOn = (env) => rankRoles(env).length > 0 && guildOf(env) !== "";
+const ranksOn = (env) => rankRoles(env).length > 0 && guildOf(env) !== "";
 
 /** Every role the bot gives or takes: the tiers' and Unranked. */
 const managedRoles = (env) => [...rankRoles(env).map((r) => r.roleId), unrankedRole(env)].filter(Boolean);
@@ -75,7 +75,7 @@ async function members(env, discord, budget) {
     if (budget() < 2) return null;
     const page = await discord.listMembers(guildOf(env), after);
     for (const m of page) roles.set(m.user.id, m.roles ?? []);
-    if (page.length < 1000) return roles;
+    if (page.length < MEMBERS_PAGE) return roles;
     after = page.at(-1).user.id;
   }
 }

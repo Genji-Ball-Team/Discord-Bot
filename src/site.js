@@ -1,19 +1,24 @@
 // Reading genjiball.us's public API. With SITE_TOKEN (the site's BOT_TOKEN), the bot also signs
 // players up for tourneys there (`/api/bot/...`): the only thing it changes on the site.
 
+import { setting } from "./time.js";
+
 export const REGIONS = {
   eu: { id: "eu", label: "EU", flag: "🇪🇺" },
   na: { id: "na", label: "NA", flag: "🇺🇸" },
 };
 
 /** Whether tourney sign-ups go to the site: SITE_TOKEN is set. Without it the bot keeps its own list. */
-export const signsUp = (env) => (env.SITE_TOKEN ?? "").trim() !== "";
+export const signsUp = (env) => setting(env, "SITE_TOKEN") !== "";
+
+/** The region's label and flag; EU for anything else. */
+export const regionInfo = (region) => REGIONS[region] ?? REGIONS.eu;
 
 export function regionOf(value) {
   return value === "na" ? "na" : "eu";
 }
 
-export class SiteError extends Error {
+class SiteError extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
@@ -23,7 +28,7 @@ export class SiteError extends Error {
 export class Site {
   constructor(env) {
     this.base = (env.SITE_URL ?? "https://genjiball.us").replace(/\/+$/, "");
-    this.token = (env.SITE_TOKEN ?? "").trim();
+    this.token = setting(env, "SITE_TOKEN");
     this.calls = 0;
   }
 
