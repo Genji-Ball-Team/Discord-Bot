@@ -1,7 +1,7 @@
 // Tournaments. Admins make them on genjiball.us (the admin page), as before; the bot posts each
 // one in TOURNEY_CHANNEL_ID and runs its sign-up in Discord:
 //
-// 1. `open`: the sign-up post has Register, Unregister and Who's signed up. No pings.
+// 1. `open`: the sign-up post has Register, Unregister and Who's in. No pings.
 // 2. `confirming` (CONFIRM_MINUTES before the start): every registered player gets a DM with a
 //    Confirm button. Anyone who doesn't press it before the start isn't playing. Register stays
 //    open, and registering now confirms at once.
@@ -14,13 +14,13 @@
 // TOURNEY_REFRESH_MINUTES). When TOURNEY_CHANNEL_ID changes, the sign-ups still open move there.
 //
 // One list with the site (SITE_TOKEN set): Register asks for the in-game name and signs the player
-// up on the site too, Unregister takes them off it, and the post's count and Who's signed up are
+// up on the site too, Unregister takes them off it, and the post's count and Who's in are
 // the site's, names typed on the tourney's page included. Registrations from before SITE_TOKEN are
 // sent on the sync. Without SITE_TOKEN the bot keeps its own list, as before.
 
 import { NO_PINGS, EMBED_COLOR, lostAccess } from "./discord.js";
 import { tourneyScreenshot } from "./screenshot.js";
-import { REGIONS, escapeMarkdown, signsUp } from "./site.js";
+import { REGIONS, Site, escapeMarkdown, signsUp } from "./site.js";
 import { discordTime, minutes } from "./time.js";
 
 export const confirmMinutes = (env) => minutes(env.CONFIRM_MINUTES);
@@ -38,32 +38,30 @@ const displayName = (interaction) => {
 
 // ---- What the messages look like ----
 
+/**
+ * The sign-up post, compact: one line, then when, where and how many in three boxes. The title opens
+ * the tourney's page on the site.
+ */
 function signupPost(env, t, counts) {
   const start = t.starts_at * 1000;
   const info = REGIONS[t.region] ?? REGIONS.eu;
   const confirming = t.phase === "confirming";
   const cancelled = t.phase === "cancelled";
-  const lines = [`🕘 **${discordTime(start, "F")}** (${discordTime(start, "R")})`, "*That's shown in your own time zone.*", ""];
-  if (cancelled) lines.push("❌ **This tournament was cancelled.**");
-  else if (confirming) {
-    lines.push(
-      "Everyone who registered got a DM: press **Confirm** there to play. No confirm, no spot.",
-      "Just arrived? Press **Register** now and you're confirmed straight away.",
-    );
-  } else lines.push(`Press **Register** to play. ${confirmMinutes(env)} minutes before the start I'll DM you to confirm.`);
+  let description = `Register below. You'll get a DM to confirm ${confirmMinutes(env)} minutes before the start.`;
+  if (cancelled) description = "❌ **This tournament was cancelled.**";
+  else if (confirming) description = "Confirming now: press **Confirm** in your DM to play. Just arrived? **Register** confirms you at once.";
 
-  const fields = [{ name: "Region", value: `${info.flag} ${info.label}`, inline: true }];
-  if (confirming) {
-    fields.push(
-      { name: "Registered", value: `**${counts.registered}**`, inline: true },
-      { name: "Confirmed", value: `**${counts.confirmed}**`, inline: true },
-    );
-  } else if (!cancelled) fields.push({ name: "Signed up", value: `**${counts.registered}**`, inline: true });
+  const fields = [
+    { name: "🕘 Starts", value: `${discordTime(start, "f")}\n${discordTime(start, "R")}`, inline: true },
+    { name: "🌍 Region", value: `${info.flag} ${info.label}`, inline: true },
+  ];
+  if (confirming) fields.push({ name: "✅ Confirmed", value: `**${counts.confirmed}** of ${counts.registered}`, inline: true });
+  else if (!cancelled) fields.push({ name: "👥 Signed up", value: `**${counts.registered}**`, inline: true });
 
   const buttons = [
-    { type: 2, style: 3, label: "Register", custom_id: `gr:reg:${t.id}` },
+    { type: 2, style: 3, label: "Register", emoji: { name: "✅" }, custom_id: `gr:reg:${t.id}` },
     { type: 2, style: 2, label: "Unregister", custom_id: `gr:unreg:${t.id}` },
-    { type: 2, style: 2, label: "Who's signed up", emoji: { name: "👥" }, custom_id: `gr:who:${t.id}` },
+    { type: 2, style: 2, label: "Who's in", emoji: { name: "👥" }, custom_id: `gr:who:${t.id}` },
   ];
   const name = t.name.slice(0, 200);
   return {
@@ -71,7 +69,8 @@ function signupPost(env, t, counts) {
     embeds: [
       {
         title: cancelled ? `~~🏆 ${name}~~ · Cancelled` : confirming ? `🏆 ${name} · confirming now` : `🏆 ${name}`,
-        description: lines.join("\n"),
+        url: new Site(env).tourneyUrl(t.id),
+        description,
         color: cancelled ? 0x808080 : EMBED_COLOR,
         fields,
         footer: {
@@ -79,7 +78,7 @@ function signupPost(env, t, counts) {
             ? `Tournament #${t.id}`
             : confirming
               ? "Only confirmed players go on the list"
-              : `Sign-ups close at the start · Tournament #${t.id}`,
+              : `Times are in your own time zone · Tournament #${t.id}`,
         },
       },
     ],
@@ -406,7 +405,7 @@ const refreshLater = (env, discord, id, signups) => async () => {
 };
 
 /**
- * Register, Unregister and Who's signed up on the post, and Register's in-game name form (`ign`).
+ * Register, Unregister and Who's in on the post, and Register's in-game name form (`ign`).
  * Returns `{ reply }`, the private reply, or `{ form }`, the form to open; with `refresh` when the
  * post's counts changed. With SITE_TOKEN each is a call to the site too (see `callsSite`).
  */
@@ -429,7 +428,7 @@ export async function signup(env, site, discord, interaction, action, id, nowMs 
   return { ...rest, refresh: refreshLater(env, discord, t.id, t.signups !== savedCount ? t.signups : undefined) };
 }
 
-/** Who's signed up: the site's list when it's one list with it, else the bot's own. */
+/** Who's in: the site's list when it's one list with it, else the bot's own. */
 async function who(env, site, t, name) {
   const { results } = await env.DB.prepare("SELECT user_id, name, confirmed FROM entrants WHERE tournament_id = ? ORDER BY registered_at, user_id")
     .bind(t.id)
