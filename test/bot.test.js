@@ -239,7 +239,7 @@ async function finishedTourney(e, siteTourneys) {
   return t;
 }
 
-test("a finished tourney: a picture of its page and the link in the results channel, once", async () => {
+test("a finished tourney: an embed with its link and a picture of its page in the tourney results channel, once", async () => {
   const browser = fakeBrowser();
   const e = env({ BROWSER: browser });
   const siteTourneys = new Map();
@@ -248,19 +248,20 @@ test("a finished tourney: a picture of its page and the link in the results chan
   await cron(e, START + 60 * 60_000);
   const url = `https://genjiball.us/tourney?id=${t.id}`;
   assert.deepEqual(browser.shots.map((s) => [s.action, s.url, s.selector]), [["screenshot", url, "main"]]);
-  const [post] = posts(calls, "results");
+  const [post] = posts(calls, "tourney-results");
   assert.deepEqual(post.files, [{ name: `tourney-${t.id}.png`, type: "image/png", size: 4 }]);
-  assert.equal(post.body.content, `**EU \\#FFA 002**: ${url}`);
-  assert.equal(post.body.flags, 4); // no link preview under the picture
+  assert.deepEqual(post.body.embeds, [
+    { title: "EU #FFA 002", url, description: url, color: 0x0e7a62, image: { url: `attachment://tourney-${t.id}.png` } },
+  ]);
   assert.deepEqual(post.body.allowed_mentions, { parse: [] });
   // The standings still go under the list, and nothing is posted again.
   assert.match(posts(calls, "signups").at(-1).body.embeds[0].title, /standings/);
   await cron(e, START + 70 * 60_000);
-  assert.equal(posts(calls, "results").length, 1);
+  assert.equal(posts(calls, "tourney-results").length, 1);
   assert.equal(browser.shots.length, 1);
 });
 
-test("no picture when the browser fails: the link goes alone", async () => {
+test("no picture when the browser fails: the embed goes without it", async () => {
   const e = env({ BROWSER: fakeBrowser({ down: true }) });
   const siteTourneys = new Map();
   const calls = installFetch({ siteTourneys });
@@ -268,20 +269,21 @@ test("no picture when the browser fails: the link goes alone", async () => {
   const error = mock.method(console, "error", () => {});
   await cron(e, START + 60 * 60_000);
   error.mock.restore();
-  const [post] = posts(calls, "results");
+  const [post] = posts(calls, "tourney-results");
   assert.equal(post.files, undefined);
-  assert.equal(post.body.content, `**EU \\#FFA 002**: https://genjiball.us/tourney?id=${t.id}`);
+  assert.equal(post.body.embeds[0].description, `https://genjiball.us/tourney?id=${t.id}`);
+  assert.equal(post.body.embeds[0].image, undefined);
 });
 
-test("a finished tourney with no results channel: no picture taken", async () => {
+test("a finished tourney with no tourney results channel: no picture taken", async () => {
   const browser = fakeBrowser();
-  const e = env({ BROWSER: browser, RESULTS_CHANNEL_ID: "" });
+  const e = env({ BROWSER: browser, TOURNEY_RESULTS_CHANNEL_ID: "" });
   const siteTourneys = new Map();
   const calls = installFetch({ siteTourneys });
   await finishedTourney(e, siteTourneys);
   await cron(e, START + 60 * 60_000);
   assert.equal(browser.shots.length, 0);
-  assert.equal(posts(calls, "results").length, 0);
+  assert.equal(posts(calls, "tourney-results").length, 0);
 });
 
 test("cancelled on the site: the post is crossed out, no DMs or list", async () => {

@@ -24,6 +24,7 @@ export const ENV = {
   TOURNEY_CHANNEL_ID: "signups",
   CONFIRM_MINUTES: "5",
   RESULTS_CHANNEL_ID: "results",
+  TOURNEY_RESULTS_CHANNEL_ID: "tourney-results",
 };
 
 /** 75+ fake players per region, best first. */
