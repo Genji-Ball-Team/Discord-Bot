@@ -286,6 +286,27 @@ test("a finished tourney with no tourney results channel: no picture taken", asy
   assert.equal(posts(calls, "tourney-results").length, 0);
 });
 
+test("a new sign-up channel: the open sign-up moves there with its registrations, and its list follows", async () => {
+  const e = env();
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const t = siteTourney(siteTourneys);
+  await cron(e, NOW);
+  await send(e, press(`gr:reg:${t.id}`, player("p1")));
+  const old = posts(calls, "signups")[0];
+  e.TOURNEY_CHANNEL_ID = "new-signups";
+  await cron(e, NOW + 5 * 60_000);
+  const [moved] = posts(calls, "new-signups");
+  assert.equal(moved.body.embeds[0].fields.find((f) => f.name === "Signed up").value, "**1**");
+  assert.ok(calls.some((c) => c.method === "DELETE" && c.path.startsWith("/channels/signups/messages/")));
+  // Moved once; the old channel gets nothing more.
+  await cron(e, NOW + 10 * 60_000);
+  assert.equal(posts(calls, "new-signups").length, 1);
+  await cron(e, START);
+  assert.match(posts(calls, "new-signups").at(-1).body.content, /confirmed players/);
+  assert.deepEqual(posts(calls, "signups"), [old]);
+});
+
 test("cancelled on the site: the post is crossed out, no DMs or list", async () => {
   const e = env();
   const siteTourneys = new Map();
