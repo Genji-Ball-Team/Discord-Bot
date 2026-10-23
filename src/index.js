@@ -12,7 +12,7 @@ import { postResults } from "./results.js";
 import { Site } from "./site.js";
 import { autocompletePlayers, renderStats, resolvePlayer } from "./stats.js";
 import { minutes } from "./time.js";
-import { callsSite, confirmButton, parseTourneyButton, runTournaments, signup, syncTourneys, tourneyMinutes } from "./tournament.js";
+import { callsSite, confirmButton, parseTourneyButton, postTourneyResults, runTournaments, signup, syncTourneys, tourneyMinutes } from "./tournament.js";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 const privateReply = (content) => json({ type: ResponseType.MESSAGE, data: { content, flags: EPHEMERAL, allowed_mentions: NO_PINGS } });
@@ -127,6 +127,8 @@ async function handleCommand(env, ctx, interaction) {
       return deferred(ctx, discord, interaction, () => setupLeaderboard(env, discord, site, interaction, options.channel ?? interaction.channel_id), {
         ephemeral: true,
       });
+    case "results":
+      return deferred(ctx, discord, interaction, () => postTourneyResults(env, discord, site, options.tourney), { ephemeral: true });
     case "link":
     case "unlink": {
       // The member as the command resolved it: their roles, without asking Discord again.

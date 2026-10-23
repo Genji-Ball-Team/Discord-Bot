@@ -668,9 +668,10 @@ export function tourneyResultsPost(site, t, picture) {
   return { embeds: [embed], allowed_mentions: NO_PINGS };
 }
 
+/** Posts it; true when it went up (with or without the picture), false when the bot can't post there. */
 async function postResultsPicture(env, discord, site, t) {
   const channelId = tourneyResultsChannel(env);
-  if (!channelId) return;
+  if (!channelId) return false;
   const url = site.tourneyUrl(t.id);
   const image = await tourneyScreenshot(env, url).catch((e) => {
     console.error(`can't take a picture of ${url}`, e);
@@ -680,10 +681,29 @@ async function postResultsPicture(env, discord, site, t) {
   const send = image
     ? discord.sendFile(channelId, tourneyResultsPost(site, t, name), { name, type: "image/png", data: image })
     : discord.sendMessage(channelId, tourneyResultsPost(site, t, null));
-  await send.catch((e) => {
-    if (!lostAccess(e)) throw e;
-    console.error(`can't post the tourney results in ${channelId}`, e);
-  });
+  return send.then(
+    () => true,
+    (e) => {
+      if (!lostAccess(e)) throw e;
+      console.error(`can't post the tourney results in ${channelId}`, e);
+      return false;
+    },
+  );
+}
+
+/**
+ * /gr results: posts a finished tourney's picture by hand, for one from before the bot posted them
+ * or one an admin verified after its picture went up. The answer, for staff only.
+ */
+export async function postTourneyResults(env, discord, site, id) {
+  const channelId = tourneyResultsChannel(env);
+  if (!channelId) return "No tourney results channel is set (`TOURNEY_RESULTS_CHANNEL_ID`).";
+  const t = (await site.tourney(id))?.tourney;
+  if (!t) return `There's no tourney #${id} on the site.`;
+  if (t.status !== "done") return `**${escapeMarkdown(t.name)}** isn't done yet: an admin marks it done on the site once its standings are in.`;
+  const posted = await postResultsPicture(env, discord, site, t);
+  if (!posted) return `I can't post in <#${channelId}>. Give me **View Channel**, **Send Messages**, **Embed Links** and **Attach Files** there.`;
+  return `Posted **${escapeMarkdown(t.name)}** in <#${channelId}>.`;
 }
 
 export async function runTournaments(env, discord, site, budget, nowMs = Date.now()) {
