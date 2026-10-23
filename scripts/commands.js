@@ -43,6 +43,12 @@ export const commands = [
       },
       {
         type: 1,
+        name: "results",
+        description: "Staff: post a finished tourney's results picture in the ranked results channel",
+        options: [{ type: 4, name: "tourney", description: "The tourney's number (genjiball.us/tourney?id=…)", min_value: 1, required: true }],
+      },
+      {
+        type: 1,
         name: "link",
         description: "Staff: link a member to their genjiball.us player, for their rank role",
         options: [

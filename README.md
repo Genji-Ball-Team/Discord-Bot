@@ -10,6 +10,7 @@ Everything is under **`/gr`**.
 |---|---|---|
 | `/gr stats player [region]` | Everyone | A player's rating, tier, rank, rounds, win %, kills, deflects, peak, streaks and recent form. Names autocomplete. |
 | `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard (20 a page, up to page 5). Its EU and NA buttons switch that message; "Full leaderboard" opens the site. |
+| `/gr results tourney` | Staff | Posts a finished tourney's picture and link in `TOURNEY_RESULTS_CHANNEL_ID`, as the bot does when one is marked done: for tourneys from before that, or one verified after its picture went up. `tourney` is the number in its genjiball.us link. |
 | `/gr link user player` | Staff | Links a member to their genjiball.us player (names autocomplete) and gives them their **rank role** at once. See [Rank roles](#rank-roles). |
 | `/gr unlink user` | Staff | Removes the link and puts them back on Unranked. |
 | `/gr setup leaderboard [channel]` | Staff | Posts the **live leaderboard** (EU top 20, updated every 5 minutes, EU/NA buttons and a "Full leaderboard" link to genjiball.us). Its buttons open a private copy, so the channel's board stays the same for everyone. |

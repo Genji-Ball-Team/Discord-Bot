@@ -82,7 +82,7 @@ function siteTourney(siteTourneys, fields = {}) {
 
 test("every command is under /gr, and there's no /gr host", () => {
   assert.deepEqual(commands.map((c) => c.name), ["gr"]);
-  assert.deepEqual(commands[0].options.map((o) => o.name), ["stats", "leaderboard", "link", "unlink", "setup"]);
+  assert.deepEqual(commands[0].options.map((o) => o.name), ["stats", "leaderboard", "results", "link", "unlink", "setup"]);
 });
 
 test("reads /gr setup leaderboard's path and options", () => {
@@ -312,6 +312,30 @@ test("a new sign-up channel: the open sign-up moves there with its registrations
   await cron(e, START);
   assert.match(posts(calls, "new-signups").at(-1).body.content, /confirmed players/);
   assert.deepEqual(posts(calls, "signups"), [old]);
+});
+
+test("/gr results: staff post an older finished tourney's picture by hand", async () => {
+  const browser = fakeBrowser();
+  const e = env({ BROWSER: browser });
+  const siteTourneys = new Map();
+  const calls = installFetch({ siteTourneys });
+  const done = siteTourney(siteTourneys, { name: "EU #FFA 001", status: "done" });
+  const later = siteTourney(siteTourneys, { name: "EU #FFA 004" });
+  const results = (id, member = STAFF) => send(e, { ...gr("results", null, [{ type: 4, name: "tourney", value: id }]), member });
+
+  assert.match((await results(done.id, player("p1"))).data.content, /Only \*\*Staff\*\*/);
+  const answer = await results(done.id);
+  assert.equal(answer.data.flags, 64);
+  assert.equal(lastOriginal(calls).content, "Posted **EU \\#FFA 001** in <#tourney-results>.");
+  const [post] = posts(calls, "tourney-results");
+  assert.equal(post.body.embeds[0].image.url, `attachment://tourney-${done.id}.png`);
+  assert.equal(browser.shots[0].url, `https://genjiball.us/tourney?id=${done.id}`);
+
+  await results(later.id);
+  assert.match(lastOriginal(calls).content, /isn't done yet/);
+  await results(999);
+  assert.equal(lastOriginal(calls).content, "There's no tourney #999 on the site.");
+  assert.equal(posts(calls, "tourney-results").length, 1);
 });
 
 test("cancelled on the site: the post is crossed out, no DMs or list", async () => {
