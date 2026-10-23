@@ -1,7 +1,7 @@
 // Tournaments. Admins make them on genjiball.us (the admin page), as before; the bot posts each
 // one in TOURNEY_CHANNEL_ID and runs its sign-up in Discord:
 //
-// 1. `open`: the sign-up post has Register, Unregister and Who's in. No pings.
+// 1. `open`: the sign-up post has Register, Unregister and Player list. No pings.
 // 2. `confirming` (CONFIRM_MINUTES before the start): every registered player gets a DM with a
 //    Confirm button. Anyone who doesn't press it before the start isn't playing. Register stays
 //    open, and registering now confirms at once.
@@ -14,7 +14,7 @@
 // TOURNEY_REFRESH_MINUTES). When TOURNEY_CHANNEL_ID changes, the sign-ups still open move there.
 //
 // One list with the site (SITE_TOKEN set): Register asks for the in-game name and signs the player
-// up on the site too, Unregister takes them off it, and the post's count and Who's in are
+// up on the site too, Unregister takes them off it, and the post's count and Player list are
 // the site's, names typed on the tourney's page included. Registrations from before SITE_TOKEN are
 // sent on the sync. Without SITE_TOKEN the bot keeps its own list, as before.
 
@@ -60,8 +60,8 @@ function signupPost(env, t, counts) {
 
   const buttons = [
     { type: 2, style: 3, label: "Register", emoji: { name: "✅" }, custom_id: `gr:reg:${t.id}` },
-    { type: 2, style: 2, label: "Unregister", custom_id: `gr:unreg:${t.id}` },
-    { type: 2, style: 2, label: "Who's in", emoji: { name: "👥" }, custom_id: `gr:who:${t.id}` },
+    { type: 2, style: 4, label: "Unregister", custom_id: `gr:unreg:${t.id}` },
+    { type: 2, style: 2, label: "Player list", emoji: { name: "👥" }, custom_id: `gr:who:${t.id}` },
   ];
   const name = t.name.slice(0, 200);
   return {
@@ -405,7 +405,7 @@ const refreshLater = (env, discord, id, signups) => async () => {
 };
 
 /**
- * Register, Unregister and Who's in on the post, and Register's in-game name form (`ign`).
+ * Register, Unregister and Player list on the post, and Register's in-game name form (`ign`).
  * Returns `{ reply }`, the private reply, or `{ form }`, the form to open; with `refresh` when the
  * post's counts changed. With SITE_TOKEN each is a call to the site too (see `callsSite`).
  */
@@ -428,7 +428,7 @@ export async function signup(env, site, discord, interaction, action, id, nowMs 
   return { ...rest, refresh: refreshLater(env, discord, t.id, t.signups !== savedCount ? t.signups : undefined) };
 }
 
-/** Who's in: the site's list when it's one list with it, else the bot's own. */
+/** Player list: the site's list when it's one list with it, else the bot's own. */
 async function who(env, site, t, name) {
   const { results } = await env.DB.prepare("SELECT user_id, name, confirmed FROM entrants WHERE tournament_id = ? ORDER BY registered_at, user_id")
     .bind(t.id)
