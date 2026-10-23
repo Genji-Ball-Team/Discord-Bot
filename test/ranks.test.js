@@ -195,12 +195,11 @@ test("/gr leaderboard: God and Demigod above everyone, the rest numbered from 1 
   });
   const { message } = await renderLeaderboard(new Site(e), "eu", 1, { linked: async (ids) => new Map(ids.includes(3) ? [[3, "100"]] : []) });
   const lines = message.embeds[0].description.split("\n");
-  // One line each, a GOD or DEM box where the list has its place numbers.
-  assert.deepEqual(lines.slice(0, 3), ["`GOD` <@100> (Player3) · **1980 Elo**", "`DEM` **Fealthy** · **2000 Elo**", ""]);
+  assert.deepEqual(lines.slice(0, 6), ["**God**", "<@100> (Player3) · **1980 Elo**", "**Demigod**", "**Fealthy** · **2000 Elo**", "", lines[5]]);
   // Ipseity (2nd on the site) is 1st here, and the page still holds 20.
-  assert.match(lines[3], /^`\s*1\.` \*\*Ipseity\*\*/);
-  assert.equal(lines.length - 3, 20);
-  assert.ok(lines.slice(3).every((l) => !/Fealthy|Player3\*\*/.test(l)));
+  assert.match(lines[5], /^`\s*1\.` \*\*Ipseity\*\*/);
+  assert.equal(lines.length - 5, 20);
+  assert.ok(lines.slice(5).every((l) => !/Fealthy|Player3\*\*/.test(l)));
   assert.deepEqual(message.allowed_mentions, { parse: [] });
 
   // Page 2 has no titles and goes on from 21.

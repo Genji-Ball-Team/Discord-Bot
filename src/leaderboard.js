@@ -1,6 +1,7 @@
-// The leaderboard message: 20 players a page, up to page 5 (top 100), EU and NA tabs. The region's God
-// and Demigod (the 1v1 tourney's titles, src/ranks.js) are listed above everyone on page 1, without a
-// place, and the rest are numbered from 1 without them, as on the site.
+// The leaderboard message: the top 20, EU and NA tabs and a link to the whole leaderboard on the site
+// (/gr leaderboard's page option shows the next 20s, up to page 5). The region's God and Demigod (the
+// 1v1 tourney's titles, src/ranks.js) are listed above everyone on page 1, without a place, and the
+// rest are numbered from 1 without them, as on the site.
 
 import { NO_PINGS, EMBED_COLOR } from "./discord.js";
 import { REGIONS, escapeMarkdown, regionOf, shownTier } from "./site.js";
@@ -9,21 +10,17 @@ export const PAGE_SIZE = 20;
 export const MAX_PAGES = 5;
 const API_PAGE_SIZE = 50;
 
-/** Players ranked `from`..`to`, and whether anyone is ranked after `to`. */
+/** Players ranked `from`..`to`. */
 async function fetchRanks(site, region, from, to) {
   const first = Math.ceil(from / API_PAGE_SIZE);
   const last = Math.ceil(to / API_PAGE_SIZE);
   const players = [];
-  let hasMore = false;
   for (let page = first; page <= last; page++) {
     const data = await site.leaderboardPage(region, page);
     players.push(...(data?.players ?? []));
-    hasMore = Boolean(data?.hasMore);
     if (!data?.hasMore) break;
   }
-  const inRange = players.filter((p) => p.rank >= from && p.rank <= to);
-  const more = hasMore || players.some((p) => p.rank > to);
-  return { players: inRange, more };
+  return players.filter((p) => p.rank >= from && p.rank <= to);
 }
 
 function formatLines(players) {
@@ -41,17 +38,16 @@ export function withoutTitled(players, titled) {
   return players.filter((p) => !ids.has(p.id)).map((p) => ({ ...p, rank: p.rank - titled.filter((t) => t.rank < p.rank).length }));
 }
 
-/** The title's box, in place of a place number, so the titled players line up with the list. */
-const TITLE_BADGES = { God: "GOD", Demigod: "DEM" };
-
 /** God, then the Demigods: their linked member (coloured by their role, pinging nobody) or name, and rating. */
 function titleLines(titled, users) {
-  return titled.map((t) => {
-    const badge = "`" + (TITLE_BADGES[t.title] ?? t.title.slice(0, 3).toUpperCase()) + "`";
+  const lines = [];
+  for (const t of titled) {
+    if (t.title !== lines.at(-1)?.title) lines.push({ title: t.title, text: `**${t.title}**` });
     const user = users.get(t.id);
     const who = user ? `<@${user}> (${escapeMarkdown(t.name)})` : `**${escapeMarkdown(t.name)}**`;
-    return `${badge} ${who} · **${Math.round(t.rating)} Elo**`;
-  });
+    lines.push({ title: t.title, text: `${who} · **${Math.round(t.rating)} Elo**` });
+  }
+  return lines.map((l) => l.text);
 }
 
 /**
@@ -67,9 +63,8 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
   const titled = (await site.titles(region).catch(() => null))?.titles ?? [];
   // A titled player above someone moves them up a place: a few more ranks fill the page.
   const fetched = await fetchRanks(site, region, from, to + titled.length);
-  const rest = withoutTitled(fetched.players, titled);
+  const rest = withoutTitled(fetched, titled);
   const players = rest.filter((p) => p.rank >= from && p.rank <= to);
-  const more = fetched.more || rest.some((p) => p.rank > to);
   const top = page === 1 && titled.length ? titleLines(titled, await linked(titled.map((t) => t.id))) : [];
   const info = REGIONS[region];
   const lines = players.length ? formatLines(players) : top.length ? [] : [page === 1 ? "Nobody is ranked here yet." : "No players on this page yet."];
@@ -84,21 +79,14 @@ export async function renderLeaderboard(site, regionValue, pageValue, { live = f
     },
     timestamp: new Date().toISOString(),
   };
-  const canNext = page < MAX_PAGES && more;
+  // EU and NA, and the whole leaderboard on the site: no pages to flip.
   const components = [
     {
       type: 1,
       components: [
         button("EU", "lb:r:eu:1", region === "eu" ? 1 : 2, region === "eu"),
         button("NA", "lb:r:na:1", region === "na" ? 1 : 2, region === "na"),
-      ],
-    },
-    {
-      type: 1,
-      components: [
-        button("◀ Prev", `lb:p:${region}:${page - 1}`, 2, page <= 1),
-        button(`${page} / ${MAX_PAGES}`, `lb:x:${region}:${page}`, 2, false),
-        button("Next ▶", `lb:n:${region}:${page + 1}`, 2, !canNext),
+        { type: 2, style: 5, label: "Full leaderboard", url: site.leaderboardUrl(region) },
       ],
     },
   ];

@@ -731,7 +731,7 @@ test("a busy feed is read a page at a time and nothing is skipped", async () => 
 
 // ---------- leaderboard ----------
 
-test("leaderboard: EU default, NA tab, pages up to 5", async () => {
+test("leaderboard: EU default, NA tab, the full leaderboard's link instead of pages", async () => {
   installFetch();
   const { message } = await renderLeaderboard(new Site(ENV), undefined, undefined);
   assert.equal(message.embeds[0].title, "🏆 EU Leaderboard — Top 20");
@@ -740,7 +740,9 @@ test("leaderboard: EU default, NA tab, pages up to 5", async () => {
   assert.deepEqual(parseButton("lb:n:na:2"), { region: "na", page: 2 });
   const five = await renderLeaderboard(new Site(ENV), "na", 9);
   assert.match(five.message.embeds[0].title, /NA Leaderboard — Top 100/);
-  assert.equal(five.message.components[1].components[2].disabled, true);
+  // EU, NA and the site's leaderboard: no Prev and Next.
+  assert.deepEqual(five.message.components.map((row) => row.components.map((b) => b.label)), [["EU", "NA", "Full leaderboard"]]);
+  assert.deepEqual(five.message.components[0].components[2], { type: 2, style: 5, label: "Full leaderboard", url: "https://genjiball.us/?region=na" });
 });
 
 test("unsigned requests are refused", async () => {
