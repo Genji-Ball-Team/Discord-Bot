@@ -34,7 +34,7 @@ STAFF_ROLE_ID = "1199414765055901737"
 
 # Where the site's tourneys get their sign-up post and list. Right-click the channel → Copy Channel ID.
 # Empty: no tourney posts.
-TOURNEY_CHANNEL_ID = "1548176545770901514"
+TOURNEY_CHANNEL_ID = "1558326695923027998"
 
 # Where tournament match results (wins, kills, rating changes) are posted. Empty: none.
 RESULTS_CHANNEL_ID = "1548176572110868551"
