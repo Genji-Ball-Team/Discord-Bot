@@ -53,7 +53,7 @@ When a tourney is marked done, the bot also posts it in `TOURNEY_RESULTS_CHANNEL
 
 ## Rank roles
 
-Staff link each member to their genjiball.us player with `/gr link`. From then on the bot keeps one rank role on them, the role of their tier in `RANK_ROLES` (Rookie, Apprentice, Master, Grandmaster, Ascendant, Champion, Sovereign), or `UNRANKED_ROLE_ID` below Rookie or before they're rated (Rookie, from 1100, is on the site and in Discord only: the game has no Rookie tag):
+Staff link each member to their genjiball.us player with `/gr link`. From then on the bot keeps one rank role on them, the role of their tier in `RANK_ROLES` (Rookie, Apprentice, Master, Grandmaster, Ascendant, Champion, Sovereign), or `UNRANKED_ROLE_ID` below Rookie or before they're rated (Rookie, from 1000, is on the site and in Discord only: the game has no Rookie tag):
 
 - **Their best region counts.** Grandmaster in EU and Apprentice in NA gets Grandmaster.
 - **Every 5 minutes** (`RANK_REFRESH_MINUTES`) it reads the server's members and every linked player's tier from the site (one request each), and fixes whoever's role is wrong: a climb or drop, a rank role changed by hand, someone who left and rejoined. The site rates every 10 minutes, so a change shows within about 15.
