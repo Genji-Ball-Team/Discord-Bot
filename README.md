@@ -9,7 +9,7 @@ Everything is under **`/gr`**.
 | Command | Who | What |
 |---|---|---|
 | `/gr stats player [region]` | Everyone | A player's rating, tier, rank, rounds, win %, kills, deflects, peak, streaks and recent form. Names autocomplete. |
-| `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard (20 a page, up to page 5). Its EU and NA buttons switch that message; "Full leaderboard" opens the site. |
+| `/gr leaderboard [region] [page]` | Staff | Posts a one-off leaderboard (20 a page, up to page 5). Each player's rank shows as its rank role, coloured and pinging nobody. Its EU and NA buttons switch that message; "Full leaderboard" opens the site. |
 | `/gr results tourney` | Staff | Posts a finished tourney's picture and link in `TOURNEY_RESULTS_CHANNEL_ID`, as the bot does when one is marked done: for tourneys from before that, or one verified after its picture went up. `tourney` is the number in its genjiball.us link. |
 | `/gr link user player` | Staff | Links a member to their genjiball.us player (names autocomplete) and gives them their **rank role** at once. See [Rank roles](#rank-roles). |
 | `/gr unlink user` | Staff | Removes the link and puts them back on Unranked. |
@@ -67,8 +67,8 @@ It needs two things in Discord: **Server Members Intent** on (Developer Portal â
 
 The 1v1 tourney's winner is **God** and the runner-up **Demigod** (at most 1 and 3 per region). They're titles, not ranks: Staff give the roles in `GOD_ROLE_IDS` and `DEMIGOD_ROLE_IDS` by hand, one per region, and the player keeps their rank role too. The bot only reads them, for linked members, at each check:
 
-- `/gr leaderboard` and the live leaderboard list them above everyone on page 1 (God, then Demigod) with their Elo and their @mention, which Discord colours with their role and which pings nobody. The rest are numbered from 1 without them.
-- genjiball.us shows them the same way on its leaderboard (God white, Demigod dark red): it reads them from the bot's `GET /titles` (genjiball-ranked `src/site/titles.ts`).
+- `/gr leaderboard` and the live leaderboard keep them in their place by Elo, with the God or Demigod role of `LEADERBOARD_TITLE_ROLES` where everyone else has their rank role. These are one role per title, for both regions, only shown on the leaderboards.
+- genjiball.us lists them above everyone on its leaderboard (God white, Demigod dark red): it reads them from the bot's `GET /titles` (genjiball-ranked `src/site/titles.ts`).
 - The game doesn't change: its top 10 and rank tags stay the real ratings.
 
 A title role on someone who isn't linked does nothing: `/gr link` them first.
@@ -126,6 +126,7 @@ Settings are `[vars]` in `wrangler.toml` (each has a comment there). Empty means
 | `RANKUP_CHANNEL_ID` | Rank-up posts |
 | `RANK_ROLES`, `UNRANKED_ROLE_ID` | The rank roles, lowest tier first, and the role below the first tier |
 | `GOD_ROLE_IDS`, `DEMIGOD_ROLE_IDS` | The titles, `region=role id` |
+| `LEADERBOARD_TITLE_ROLES` | The role God and Demigod show as on the leaderboards, `title=role id` |
 | `TOURNEY_REFRESH_MINUTES`, `CONFIRM_MINUTES`, `LEADERBOARD_REFRESH_MINUTES`, `RANK_REFRESH_MINUTES` | Minutes (1 to 60, 5 if missing) |
 
 Secrets: `DISCORD_TOKEN` and `SITE_TOKEN` (optional). Bindings: `DB` (D1) and `BROWSER`.

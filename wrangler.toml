@@ -69,6 +69,9 @@ UNRANKED_ROLE_ID = "1535428239051456573"
 # for the site's and /gr leaderboard's lists. Only linked members count.
 GOD_ROLE_IDS = "eu=1562890489038897202, na=1562890528922804319"
 DEMIGOD_ROLE_IDS = "eu=1562890585021612052, na=1562890626087780473"
+# The role God and Demigod show as on the leaderboards, title=role id: one for both regions, only
+# shown there. Empty: the title is written out.
+LEADERBOARD_TITLE_ROLES = "God=1512571159755886833, Demigod=1512570886811811840"
 # Where a climb to a higher tier is posted ("**Name** has ranked up to **Champion** 🏆"). Empty: not posted.
 RANKUP_CHANNEL_ID = "1535559725209616434"
 # How often the rank roles are checked, in minutes (1–60).
