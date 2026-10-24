@@ -3,7 +3,7 @@ import { test } from "node:test";
 import worker from "../src/index.js";
 import { Discord } from "../src/discord.js";
 import { renderLeaderboard } from "../src/leaderboard.js";
-import { link, rankOf, runRanks, unlink } from "../src/ranks.js";
+import { leaderboardRoles, link, rankOf, runRanks, unlink } from "../src/ranks.js";
 import { Site } from "../src/site.js";
 import { ENV, fakeD1, installFetch } from "./helpers.js";
 
@@ -182,9 +182,8 @@ test("no RANK_ROLES: no checks, and /gr link says so", async () => {
   assert.match(await link(e, new Discord(e), new Site(e), { userId: "100", has: [], playerId: 7 }), /aren't set up/);
 });
 
-test("/gr leaderboard: God and Demigod above everyone, the rest numbered from 1 without them", async () => {
-  const e = env();
-  e.DB.raw.prepare("INSERT INTO links (user_id, player_id, name, rank, linked_at) VALUES ('100', 3, 'Player3', 'Champion', 0)").run();
+test("/gr leaderboard: ranks as their roles, God and Demigod in their place with the leaderboard's title roles", async () => {
+  const e = env({ LEADERBOARD_TITLE_ROLES: "God=30, Demigod=31" });
   installFetch({
     titles: {
       eu: [
@@ -193,18 +192,26 @@ test("/gr leaderboard: God and Demigod above everyone, the rest numbered from 1 
       ],
     },
   });
-  const { message } = await renderLeaderboard(new Site(e), "eu", 1, { linked: async (ids) => new Map(ids.includes(3) ? [[3, "100"]] : []) });
+  const { message } = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e) });
   const lines = message.embeds[0].description.split("\n");
-  assert.deepEqual(lines.slice(0, 6), ["**God**", "<@100> (Player3) · **1980 Elo**", "**Demigod**", "**Fealthy** · **2000 Elo**", "", lines[5]]);
-  // Ipseity (2nd on the site) is 1st here, and the page still holds 20.
-  assert.match(lines[5], /^`\s*1\.` \*\*Ipseity\*\*/);
-  assert.equal(lines.length - 5, 20);
-  assert.ok(lines.slice(5).every((l) => !/Fealthy|Player3\*\*/.test(l)));
+  assert.equal(lines.length, 20);
+  assert.equal(lines[0], "` 1.` **Fealthy** — <@&31> · **2000 Elo**");
+  assert.equal(lines[1], "` 2.` **Ipseity** — <@&13> · **1990 Elo**");
+  assert.equal(lines[2], "` 3.` **Player3** — <@&30> · **1980 Elo**");
   assert.deepEqual(message.allowed_mentions, { parse: [] });
 
-  // Page 2 has no titles and goes on from 21.
-  const two = await renderLeaderboard(new Site(e), "eu", 2, {});
-  assert.match(two.message.embeds[0].description.split("\n")[0], /^`21\.`/);
+  // Page 2 goes on from 21; a tier without a role is written out.
+  const two = await renderLeaderboard(new Site(e), "eu", 2, { roles: new Map([["Master", "12"]]) });
+  assert.match(two.message.embeds[0].description.split("\n")[0], /^`21\.` \*\*Player21\*\* — Grandmaster ·/);
+});
+
+test("leaderboardRoles: the rank roles, Unranked's, and one role per title", () => {
+  const roles = leaderboardRoles(env({ LEADERBOARD_TITLE_ROLES: "God=30, Demigod=31" }));
+  assert.equal(roles.get("Rookie"), "17");
+  assert.equal(roles.get("Sovereign"), "16");
+  assert.equal(roles.get("God"), "30");
+  assert.equal(roles.get("Demigod"), "31");
+  assert.equal(roles.get("Unranked"), "10");
 });
 
 test("tiers are only read again when the match feed moved, a link is new, or an hour went by", async () => {

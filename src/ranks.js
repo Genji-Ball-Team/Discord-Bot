@@ -9,7 +9,7 @@
 //
 // Titles (God, Demigod) are won in the 1v1 tourney and given by Staff as roles per region
 // (GOD_ROLE_IDS, DEMIGOD_ROLE_IDS). The bot doesn't change them: it notes which linked players have
-// one, for the leaderboards. The site reads them from `GET /titles` (genjiball-ranked
+// one, for the leaderboards (where they show as LEADERBOARD_TITLE_ROLES). The site reads them from `GET /titles` (genjiball-ranked
 // src/site/titles.ts), and `/gr leaderboard` from the site's `/api/titles`.
 
 import { MEMBERS_PAGE, NO_PINGS, lostAccess } from "./discord.js";
@@ -211,12 +211,16 @@ export async function listTitles(env) {
 }
 
 /** Linked Discord users by site player id, for the leaderboard's @mentions. */
-export async function linkedUsers(env, playerIds) {
-  if (!playerIds.length) return new Map();
-  const { results } = await env.DB.prepare("SELECT user_id, player_id FROM links WHERE player_id IN (SELECT value FROM json_each(?))")
-    .bind(JSON.stringify(playerIds))
-    .all();
-  return new Map(results.map((r) => [r.player_id, r.user_id]));
+/**
+ * The role each rank and title shows as on the leaderboards, by label: the rank roles, Unranked's, and
+ * LEADERBOARD_TITLE_ROLES for God and Demigod (one role each, not the per-region ones Staff give).
+ */
+export function leaderboardRoles(env) {
+  return new Map([
+    ...rankRoles(env).map((r) => [r.label, r.roleId]),
+    ...(unrankedRole(env) ? [["Unranked", unrankedRole(env)]] : []),
+    ...pairs(env.LEADERBOARD_TITLE_ROLES),
+  ]);
 }
 
 const CANT_CHANGE_ROLES =
