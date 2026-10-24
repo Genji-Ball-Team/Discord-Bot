@@ -32,7 +32,7 @@ function formatLines(players, titles, roles) {
     const place = "`" + `${p.rank}.`.padStart(width, " ") + "`";
     const name = p.name.length > 20 ? p.name.slice(0, 19) + "…" : p.name;
     const rank = titles.get(p.id) ?? shownTier(p)?.label ?? "Unranked";
-    return `${place} **${escapeMarkdown(name)}** — ${shownRank(rank, roles)} · **${Math.round(p.rating)} Elo**`;
+    return `${place} **${escapeMarkdown(name)}** — ${shownRank(rank, roles)} · ${Math.round(p.rating)} Elo`;
   });
 }
 

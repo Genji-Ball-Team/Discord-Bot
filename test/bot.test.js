@@ -792,7 +792,7 @@ test("leaderboard: EU default, NA tab, the full leaderboard's link instead of pa
   const { message } = await renderLeaderboard(new Site(ENV), undefined, undefined);
   assert.equal(message.embeds[0].title, "🏆 EU Leaderboard — Top 20");
   assert.equal(message.embeds[0].description.split("\n").length, 20);
-  assert.match(message.embeds[0].description, /\*\*Fealthy\*\* — Grandmaster · \*\*2000 Elo\*\*/);
+  assert.match(message.embeds[0].description, /\*\*Fealthy\*\* — Grandmaster · 2000 Elo$/m);
   assert.deepEqual(parseButton("lb:n:na:2"), { region: "na", page: 2 });
   const five = await renderLeaderboard(new Site(ENV), "na", 9);
   assert.match(five.message.embeds[0].title, /NA Leaderboard — Top 100/);
