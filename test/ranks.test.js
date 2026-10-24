@@ -195,9 +195,9 @@ test("/gr leaderboard: ranks as their roles, God and Demigod in their place with
   const { message } = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e) });
   const lines = message.embeds[0].description.split("\n");
   assert.equal(lines.length, 20);
-  assert.equal(lines[0], "` 1.` **Fealthy** — <@&31> · **2000 Elo**");
-  assert.equal(lines[1], "` 2.` **Ipseity** — <@&13> · **1990 Elo**");
-  assert.equal(lines[2], "` 3.` **Player3** — <@&30> · **1980 Elo**");
+  assert.equal(lines[0], "` 1.` **Fealthy** — <@&31> · 2000 Elo");
+  assert.equal(lines[1], "` 2.` **Ipseity** — <@&13> · 1990 Elo");
+  assert.equal(lines[2], "` 3.` **Player3** — <@&30> · 1980 Elo");
   assert.deepEqual(message.allowed_mentions, { parse: [] });
 
   // Page 2 goes on from 21; a tier without a role is written out.
