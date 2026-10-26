@@ -4,8 +4,9 @@
 // the Server Members intent) and, when a match was rated since or an hour went by, every linked
 // player's tiers (one site request, `/api/tiers`), and fixes whoever's role is wrong: a climb or
 // drop, a role changed by hand, someone who rejoined. Only these roles are ever added or removed,
-// one at a time, never the member's whole list. A climb is posted in RANKUP_CHANNEL_ID, pinging
-// nobody.
+// one at a time, never the member's whole list. A climb past the member's highest rank so far
+// (`peak_rank`) is posted in RANKUP_CHANNEL_ID, pinging nobody: each rank once, and never the first
+// tier (Rookie), which only takes a few games.
 //
 // Titles (God, Demigod) are won in the 1v1 tourney and given by Staff as roles per region
 // (GOD_ROLE_IDS, DEMIGOD_ROLE_IDS). The bot doesn't change them: it notes which linked players have
@@ -146,7 +147,10 @@ export async function runRanks(env, discord, site, budget, nowMs = Date.now()) {
     if (!has) continue;
     const rank = tiers ? rankOf(env, player) : link.rank;
     const changes = changesFor(env, has, roleFor(env, rank));
-    const climbed = link.rank !== null && rank !== link.rank && tierIndex(env, rank) > tierIndex(env, link.rank) && rankupChannel(env);
+    // Linked before peak_rank was kept: their rank then is the highest we know of.
+    const peak = link.peak_rank ?? link.rank;
+    const higher = tierIndex(env, rank) > tierIndex(env, peak);
+    const climbed = link.rank !== null && higher && tierIndex(env, rank) > 0 && rankupChannel(env);
     const cost = 2 * (changes.add.length + changes.remove.length) + (climbed ? 2 : 0);
     if (cost && budget() < cost + 1) {
       done = false;
@@ -166,13 +170,15 @@ export async function runRanks(env, discord, site, budget, nowMs = Date.now()) {
         console.error(`can't post in ${rankupChannel(env)}`, e);
       });
     }
-    if (rank !== link.rank || name !== link.name || player.playerId !== link.player_id) {
-      updates.push({ user_id: link.user_id, player_id: player.playerId, name, rank });
+    const peakRank = higher ? rank : peak;
+    if (rank !== link.rank || name !== link.name || player.playerId !== link.player_id || peakRank !== link.peak_rank) {
+      updates.push({ user_id: link.user_id, player_id: player.playerId, name, rank, peak_rank: peakRank });
     }
   }
   if (updates.length) {
     await env.DB.prepare(
-      `UPDATE links SET player_id = json_extract(u.value, '$.player_id'), name = json_extract(u.value, '$.name'), rank = json_extract(u.value, '$.rank')
+      `UPDATE links SET player_id = json_extract(u.value, '$.player_id'), name = json_extract(u.value, '$.name'), rank = json_extract(u.value, '$.rank'),
+         peak_rank = json_extract(u.value, '$.peak_rank')
        FROM json_each(?) u WHERE links.user_id = json_extract(u.value, '$.user_id')`,
     )
       .bind(JSON.stringify(updates))
@@ -246,8 +252,9 @@ export async function link(env, discord, site, { userId, has, playerId }, nowMs 
     if (!lostAccess(e)) throw e;
     return CANT_CHANGE_ROLES;
   }
-  await env.DB.prepare("INSERT OR REPLACE INTO links (user_id, player_id, name, rank, linked_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(userId, player.playerId, player.name ?? "", rank, nowMs)
+  // Their rank now counts as reached: it's never posted as a rank-up.
+  await env.DB.prepare("INSERT OR REPLACE INTO links (user_id, player_id, name, rank, peak_rank, linked_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(userId, player.playerId, player.name ?? "", rank, rank, nowMs)
     .run();
   return `Linked <@${userId}> to ${name} (${site.playerUrl(player.playerId, Object.keys(player.regions)[0] ?? "eu")}). Rank role: **${rank || "Unranked"}**.`;
 }

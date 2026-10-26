@@ -104,6 +104,53 @@ test("the check follows climbs and drops, posts a climb once, fixes hand-set rol
   assert.equal(posts(calls).at(-1).body.content, "**New\\*Guy** has ranked up to **Apprentice** 🏆");
 });
 
+test("each rank is posted once: not Rookie, not a rank they had before, only a new highest", async () => {
+  const e = env();
+  const members = [member("100"), member("200")];
+  const tiers = new Map([
+    [7, rated(7, "Fealthy", {})],
+    [8, rated(8, "Ipseity", { eu: "Master" })],
+  ]);
+  const calls = installFetch({ members, tiers });
+  for (const [userId, playerId] of [["100", 7], ["200", 8]]) {
+    await link(e, new Discord(e), new Site(e), { userId, has: ["10"], playerId });
+  }
+  const rankAfter = async (playerId, label) => {
+    tiers.set(playerId, rated(playerId, playerId === 7 ? "Fealthy" : "Ipseity", { eu: label }));
+    calls.length = 0;
+    await check(e);
+    return posts(calls).map((c) => c.body.content);
+  };
+
+  // Rookie gets its role but no post; Apprentice after it does.
+  assert.deepEqual(await rankAfter(7, "Rookie"), []);
+  assert.ok(members[0].roles.includes("17"));
+  assert.deepEqual(await rankAfter(7, "Apprentice"), ["**Fealthy** has ranked up to **Apprentice** 🏆"]);
+  // Down and back up: not again.
+  assert.deepEqual(await rankAfter(7, "Rookie"), []);
+  assert.deepEqual(await rankAfter(7, "Apprentice"), []);
+  // Master was Ipseity's rank when linked: dropping and climbing back isn't a rank-up, Grandmaster is.
+  assert.deepEqual(await rankAfter(8, "Apprentice"), []);
+  assert.deepEqual(await rankAfter(8, "Master"), []);
+  assert.deepEqual(await rankAfter(8, "Grandmaster"), ["**Ipseity** has ranked up to **Grandmaster** 🏆"]);
+  assert.ok(members[1].roles.includes("13"));
+});
+
+test("a link from before peak_rank counts its last rank as its highest", async () => {
+  const e = env();
+  const members = [member("100", ["12"])];
+  const tiers = new Map([[7, rated(7, "Fealthy", { eu: "Apprentice" })]]);
+  const calls = installFetch({ members, tiers });
+  e.DB.raw.prepare("INSERT INTO links (user_id, player_id, name, rank, linked_at) VALUES ('100', 7, 'Fealthy', 'Master', 0)").run();
+  await check(e);
+  tiers.set(7, rated(7, "Fealthy", { eu: "Master" }));
+  await check(e);
+  assert.equal(posts(calls).length, 0);
+  tiers.set(7, rated(7, "Fealthy", { eu: "Grandmaster" }));
+  await check(e);
+  assert.deepEqual(posts(calls).map((c) => c.body.content), ["**Fealthy** has ranked up to **Grandmaster** 🏆"]);
+});
+
 test("someone who left and rejoined gets their rank back on the next check", async () => {
   const e = env();
   const members = [member("100")];

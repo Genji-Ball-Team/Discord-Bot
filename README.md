@@ -57,7 +57,7 @@ Staff link each member to their genjiball.us player with `/gr link`. From then o
 
 - **Their best region counts.** Grandmaster in EU and Apprentice in NA gets Grandmaster.
 - **Every 5 minutes** (`RANK_REFRESH_MINUTES`) it reads the server's members and every linked player's tier from the site (one request each), and fixes whoever's role is wrong: a climb or drop, a rank role changed by hand, someone who left and rejoined. The site rates every 10 minutes, so a change shows within about 15.
-- **A climb** is posted in `RANKUP_CHANNEL_ID`: "**Fealthy** has ranked up to **Grandmaster** 🏆", pinging nobody. Drops and new links aren't posted.
+- **A climb** is posted in `RANKUP_CHANNEL_ID`: "**Fealthy** has ranked up to **Grandmaster** 🏆", pinging nobody. Each rank is posted once per member: only a climb past the highest rank they've had since they were linked (their rank when linked counts), so dropping and climbing back isn't posted again. Rookie, the first tier, is never posted (the role is still given). Drops and new links aren't posted.
 - It only ever adds or removes the rank roles, one at a time. Every other role stays as it is. Inactive players keep their rank.
 - Unlinked members are never touched.
 
@@ -133,7 +133,7 @@ Secrets: `DISCORD_TOKEN` and `SITE_TOKEN` (optional). Bindings: `DB` (D1) and `B
 
 The cron runs every minute and does the work above on its own schedule. The Worker also answers `POST /interactions` (Discord), `GET /titles` (who has a title, for genjiball.us) and `GET /` (a status line).
 
-The database (`migrations/`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are), `result_posts` (match result posts), `links` (`/gr link`) and `titles` (God and Demigod at the last rank check).
+The database (`migrations/`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are), `result_posts` (match result posts), `links` (`/gr link`, with each member's highest rank so far) and `titles` (God and Demigod at the last rank check).
 
 ## Good to know
 
