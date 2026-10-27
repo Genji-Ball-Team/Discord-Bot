@@ -54,10 +54,11 @@ function signupsOf(siteSignups, id) {
 /**
  * Installs a fake fetch. Discord and site calls are recorded in `calls`; `closedDms` users answer
  * 403 to a DM; Discord answers 500 to the calls `discordDown({ method, path })` picks (429 when it
- * returns 429);
+ * returns 429, 404 when it returns 404);
  * `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id. `members` are the
  * server's members (`{ user: { id }, roles }`), changed by the role calls; `tiers` the site's
- * `/api/tiers` answer by player id, `titles` its `/api/titles` list by region.
+ * `/api/tiers` answer by player id, `titles` its `/api/titles` list by region, `lobbies` its
+ * `/api/lobbies` list by region (changed by the test between runs).
  */
 export function installFetch({
   closedDms = new Set(),
@@ -70,6 +71,7 @@ export function installFetch({
   members = [],
   tiers = new Map(),
   titles = {},
+  lobbies = {},
 } = {}) {
   const calls = [];
   let nextId = 5000;
@@ -147,6 +149,10 @@ export function installFetch({
         const ids = url.searchParams.get("players").split(",").map(Number);
         return reply({ players: ids.filter((id) => tiers.has(id)).map((id) => ({ id, ...tiers.get(id) })) });
       }
+      if (url.pathname === "/api/lobbies") {
+        if (siteDown) return reply({ error: "internal" }, 500);
+        return reply({ region: url.searchParams.get("region"), lobbies: lobbies[url.searchParams.get("region")] ?? [] });
+      }
       if (url.pathname === "/api/titles") return reply({ region: url.searchParams.get("region"), titles: titles[url.searchParams.get("region")] ?? [] });
       const pub = /^\/api\/tourneys\/(\d+)$/.exec(url.pathname);
       if (pub) {
@@ -196,6 +202,7 @@ export function installFetch({
       calls.push({ method, path, body, query: url.search, ...(files && { files }) });
       const down = discordDown({ method, path });
       if (down === 429) return reply({ message: "You are being rate limited.", retry_after: 0 }, 429);
+      if (down === 404) return reply({ message: "Unknown Message", code: 10008 }, 404);
       if (down) return reply({ message: "Internal Server Error" }, 500);
       let m;
       if (method === "PATCH" && /^\/webhooks\/app1\/[^/]+\/messages\/@original$/.test(path)) {
