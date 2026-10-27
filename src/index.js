@@ -1,12 +1,13 @@
 // The Worker: Discord sends every slash command and button press to /interactions, and the cron
 // runs every minute: tournament DMs and lists, the site's new tourneys, tournament results, the
-// live leaderboards, the rank roles. genjiball.us reads who has a title from `GET /titles`.
+// live leaderboards, the lobby status, the rank roles. genjiball.us reads who has a title from `GET /titles`.
 //
 // All commands are under /gr. Everyone can use /gr stats; the rest is for Staff (STAFF_ROLE_ID, or
 // server admins).
 
 import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, lostAccess, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
+import { refreshLobbyStatus } from "./lobbies.js";
 import { leaderboardRoles, link, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
 import { postResults } from "./results.js";
 import { AUTOCOMPLETE_TIMEOUT_MS, Site } from "./site.js";
@@ -273,6 +274,8 @@ export default {
     if (minute % refreshMinutes(env) === 0) {
       await refreshBoards(env, discord, site, budget).catch((e) => console.error("boards", e));
     }
+    // The lobby status: every minute, as often as the host tool's heartbeats.
+    await refreshLobbyStatus(env, discord, site, budget).catch((e) => console.error("lobby status", e));
     // Rank roles, out of step with the rest, or the next minute when the last check ran out of budget.
     if (minute % rankMinutes(env) === 4 % rankMinutes(env) || (await ranksPending(env))) {
       await runRanks(env, discord, site, budget, now).catch((e) => console.error("ranks", e));

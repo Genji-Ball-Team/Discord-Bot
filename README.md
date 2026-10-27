@@ -51,6 +51,10 @@ The bot follows the site's match feed (checked every 5 minutes; the site rates e
 
 When a tourney is marked done, the bot also posts it in `TOURNEY_RESULTS_CHANNEL_ID` (the ranked results channel, where the rank-ups go too): an embed with the same side line as the bot's other posts, the tourney's name and link, and a picture of its page on genjiball.us (the title, date, region and every lobby's winner and standings table, as on the site, without the host's in-game screenshot). Cloudflare's browser takes it: the `[browser]` binding in `wrangler.toml` (Browser Run's screenshot quick action, `src/screenshot.js`). No token or setup beyond deploying. The free plan's 10 browser minutes a day are plenty: a picture takes a few seconds. If the picture can't be taken, the embed is posted without it. The picture is taken once, when the standings come in: a lobby verified later isn't redrawn. The browser runs in UTC, so the start time on the picture is UTC.
 
+## Lobby status
+
+One message in `LOBBY_STATUS_CHANNEL_ID` says whether a ranked lobby is open in `LOBBY_STATUS_REGION` (EU): **Active** ✅ with the number of players and each one's name, or **Offline** ❌. It reads genjiball.us's live lobbies (the same as [genjiball.us/live](https://genjiball.us/live)), which the host tool keeps up to date while a ranked match is played. The bot posts it once and then edits it every minute when something changed, so it pings and notifies nobody. Delete it and the bot posts a new one. A host on a host tool too old to send names shows only the count.
+
 ## Rank roles
 
 Staff link each member to their genjiball.us player with `/gr link`. From then on the bot keeps one rank role on them, the role of their tier in `RANK_ROLES` (Rookie, Apprentice, Master, Grandmaster, Ascendant, Champion, Sovereign), or `UNRANKED_ROLE_ID` below Rookie or before they're rated (Rookie, from 1000, is on the site and in Discord only: the game has no Rookie tag):
@@ -124,6 +128,7 @@ Settings are `[vars]` in `wrangler.toml` (each has a comment there). Empty means
 | `RESULTS_CHANNEL_ID` | Tournament match results |
 | `TOURNEY_RESULTS_CHANNEL_ID` | A finished tourney's picture |
 | `RANKUP_CHANNEL_ID` | Rank-up posts |
+| `LOBBY_STATUS_CHANNEL_ID`, `LOBBY_STATUS_REGION` | The lobby status message, and the region it shows (`eu` or `na`) |
 | `RANK_ROLES`, `UNRANKED_ROLE_ID` | The rank roles, lowest tier first, and the role below the first tier |
 | `GOD_ROLE_IDS`, `DEMIGOD_ROLE_IDS` | The titles, `region=role id` |
 | `LEADERBOARD_TITLE_ROLES` | The role God and Demigod show as on the leaderboards, `title=role id` |
@@ -133,7 +138,7 @@ Secrets: `DISCORD_TOKEN` and `SITE_TOKEN` (optional). Bindings: `DB` (D1) and `B
 
 The cron runs every minute and does the work above on its own schedule. The Worker also answers `POST /interactions` (Discord), `GET /titles` (who has a title, for genjiball.us) and `GET /` (a status line).
 
-The database (`migrations/`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are), `result_posts` (match result posts), `links` (`/gr link`, with each member's highest rank so far) and `titles` (God and Demigod at the last rank check).
+The database (`migrations/`): `tournaments`, `entrants`, `dm_channels` (DM channel per user), `boards` (live leaderboards), `bot_state` (where the match feed and rank check are, and the lobby status message), `result_posts` (match result posts), `links` (`/gr link`, with each member's highest rank so far) and `titles` (God and Demigod at the last rank check).
 
 ## Good to know
 

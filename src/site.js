@@ -169,6 +169,11 @@ export class Site {
     return this.get(`/api/tourneys/${id}`);
   }
 
+  /** The region's ranked lobbies open now (the host tool's heartbeats). Never cached: it's the live status. */
+  lobbies(region) {
+    return this.get("/api/lobbies", { region });
+  }
+
   playerUrl(id, region) {
     return `${this.base}/player?id=${id}&region=${region}`;
   }
@@ -179,6 +184,10 @@ export class Site {
 
   leaderboardUrl(region) {
     return `${this.base}/?region=${region}`;
+  }
+
+  liveUrl(region) {
+    return `${this.base}/live?region=${region}`;
   }
 }
 

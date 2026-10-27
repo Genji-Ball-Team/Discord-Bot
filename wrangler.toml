@@ -4,7 +4,7 @@ compatibility_date = "2026-09-01"
 # The Genji Ball Cloudflare account (same as genjiball.us). Pinned so a deploy can never go to a personal account.
 account_id = "c212ad20cc4f4b5382766735f57b91c3"
 
-# Every minute: tournament confirm DMs and lists. Then, by the minute: every TOURNEY_REFRESH_MINUTES the
+# Every minute: tournament confirm DMs and lists, and the lobby status. Then, by the minute: every TOURNEY_REFRESH_MINUTES the
 # site's new or changed tourneys; every 5 the tournament match results; every LEADERBOARD_REFRESH_MINUTES
 # the live leaderboards; every RANK_REFRESH_MINUTES the rank roles (`scheduled` in src/index.js).
 [triggers]
@@ -55,6 +55,11 @@ TOURNEY_REFRESH_MINUTES = "5"
 
 # Minutes before the start that the Confirm DMs go out (1–60). Unconfirmed players aren't on the list.
 CONFIRM_MINUTES = "5"
+
+# Where the lobby status is kept: one message, edited every minute, saying whether a ranked lobby is open
+# in LOBBY_STATUS_REGION ("eu" or "na") and who is in it (genjiball.us/live). Empty: none.
+LOBBY_STATUS_CHANNEL_ID = "1535594980519976960"
+LOBBY_STATUS_REGION = "eu"
 
 # How often the live leaderboard (/gr setup leaderboard) updates, in minutes (1–60).
 LEADERBOARD_REFRESH_MINUTES = "5"
