@@ -12,10 +12,12 @@ const VIEWPORT = { width: 720, height: 900, deviceScaleFactor: 2 };
 /**
  * Thin margins, so the tourney fills the picture. The host's in-game screenshot beside each table is
  * left out: at this width it squeezed the table and cut off the "Out" column, and the table already
- * says what it shows.
+ * says what it shows. The one-column grid is !important: the site's own rule is scoped
+ * (`.tourneys .lobby-body`, more specific than ours) and still sees the hidden screenshot, so without
+ * it the table keeps only part of the width and loses its last columns.
  */
 const PICTURE_CSS = ".top, .tabbar { display: none } main { flex: none; padding: 1rem } "
-  + ".lobby-body { grid-template-columns: minmax(0, 1fr) } .proof { display: none }";
+  + ".lobby-body { grid-template-columns: minmax(0, 1fr) !important } .proof { display: none }";
 
 /** The tourney page: its `main` (title, facts, every lobby's standings), once the lobbies have loaded. */
 export async function tourneyScreenshot(env, url) {
