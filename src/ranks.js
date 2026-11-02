@@ -55,6 +55,13 @@ export function rankOf(env, player) {
   return tierIndex(env, best) >= 0 ? best : "";
 }
 
+/** The region their rank comes from (the first one when none has a rank), for the link to their page. */
+function rankRegion(env, player) {
+  const regions = Object.entries(player?.regions ?? {});
+  const best = regions.reduce((top, r) => (tierIndex(env, shownTier(r[1])?.label) > tierIndex(env, shownTier(top[1])?.label) ? r : top), regions[0]);
+  return best?.[0] ?? "eu";
+}
+
 const roleFor = (env, rank) => rankRoles(env).find((r) => r.label === rank)?.roleId ?? unrankedRole(env);
 
 /** The role changes that give a member with `has` the rank role `want` and none of the others. */
@@ -256,7 +263,7 @@ export async function link(env, discord, site, { userId, has, playerId }, nowMs 
   await env.DB.prepare("INSERT OR REPLACE INTO links (user_id, player_id, name, rank, peak_rank, linked_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(userId, player.playerId, player.name ?? "", rank, rank, nowMs)
     .run();
-  return `Linked <@${userId}> to ${name} (${site.playerUrl(player.playerId, Object.keys(player.regions)[0] ?? "eu")}). Rank role: **${rank || "Unranked"}**.`;
+  return `Linked <@${userId}> to ${name} (${site.playerUrl(player.playerId, rankRegion(env, player))}). Rank role: **${rank || "Unranked"}**.`;
 }
 
 /** /gr unlink: takes the link and the rank role away, back to Unranked. */
