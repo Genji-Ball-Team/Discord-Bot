@@ -111,7 +111,9 @@ test("staff commands are staff only; everyone can use /gr stats", async () => {
 test("/gr link is staff only, uses the member's roles from the command and answers privately", async () => {
   const e = env({ RANK_ROLES: "Master=12", UNRANKED_ROLE_ID: "10", DISCORD_GUILD_ID: "guild1" });
   const members = [{ user: { id: "100" }, roles: ["10"] }];
-  const calls = installFetch({ members, tiers: new Map([[7, { playerId: 7, name: "Fealthy", regions: { eu: { tier: { label: "Master" } } } }]]) });
+  // Unranked in EU, Master in NA: the link is to their NA page, the one their rank comes from.
+  const regions = { eu: { tier: null }, na: { tier: { label: "Master" } } };
+  const calls = installFetch({ members, tiers: new Map([[7, { playerId: 7, name: "Fealthy", regions }]]) });
   const linkCommand = gr("link", null, [
     { type: 6, name: "user", value: "100" },
     { type: 3, name: "player", value: "7" },
@@ -122,6 +124,7 @@ test("/gr link is staff only, uses the member's roles from the command and answe
   const res = await send(e, command(STAFF));
   assert.equal(res.data.flags, 64);
   assert.match(lastOriginal(calls).content, /Linked <@100> to \*\*Fealthy\*\*.*\*\*Master\*\*/);
+  assert.match(lastOriginal(calls).content, /player\?id=7&region=na\)/);
   assert.deepEqual(lastOriginal(calls).allowed_mentions, { parse: [] });
   assert.deepEqual(members[0].roles, ["12"]);
 });
