@@ -259,6 +259,8 @@ test("a finished tourney: an embed with its link and a picture of its page in th
   assert.deepEqual(browser.shots.map((s) => [s.action, s.url, s.selector]), [["screenshot", url, "main"]]);
   // The host's in-game screenshot squeezed the table and cut its last column off.
   assert.match(browser.shots[0].addStyleTag[0].content, /\.proof \{ display: none \}/);
+  // The site's grid rule is more specific and still sees the hidden screenshot: ours must win.
+  assert.match(browser.shots[0].addStyleTag[0].content, /\.lobby-body \{ grid-template-columns: minmax\(0, 1fr\) !important \}/);
   const [post] = posts(calls, "tourney-results");
   assert.deepEqual(post.files, [{ name: `tourney-${t.id}.png`, type: "image/png", size: 4 }]);
   assert.deepEqual(post.body.embeds, [
