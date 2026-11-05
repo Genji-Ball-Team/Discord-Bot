@@ -1,5 +1,5 @@
 // The Worker: Discord sends every slash command and button press to /interactions, and the cron
-// runs every minute: tournament DMs and lists, the site's new tourneys, tournament results, the
+// runs every minute: tournament DMs and lists, the site's new tourneys, tournament results, duels, the
 // live leaderboards, the lobby status, the rank roles. genjiball.us reads who has a title from `GET /titles`.
 //
 // All commands are under /gr. Everyone can use /gr stats; the rest is for Staff (STAFF_ROLE_ID, or
@@ -7,6 +7,7 @@
 
 import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, lostAccess, verifyRequest } from "./discord.js";
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
+import { postDuels } from "./duels.js";
 import { refreshLobbyStatus } from "./lobbies.js";
 import { leaderboardRoles, link, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
 import { postResults } from "./results.js";
@@ -270,6 +271,8 @@ export default {
     // Tournament results: the site rates matches every 10 minutes, so every 5 is soon enough.
     if (minute % 5 === 2) {
       await postResults(env, discord, site, budget).catch((e) => console.error("results", e));
+      // Duels are rated as staff save them: posted on the same beat, before the rank-ups they cause.
+      await postDuels(env, discord, site, budget).catch((e) => console.error("duels", e));
     }
     if (minute % refreshMinutes(env) === 0) {
       await refreshBoards(env, discord, site, budget).catch((e) => console.error("boards", e));

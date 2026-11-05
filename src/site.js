@@ -174,6 +174,15 @@ export class Site {
     return this.get("/api/lobbies", { region });
   }
 
+  /** The region's newest duels (30), newest first. Never cached: a new or voided duel should show at once. */
+  duels(region) {
+    return this.get("/api/duels", { region });
+  }
+
+  duelsUrl(region) {
+    return `${this.base}/duels?region=${region}`;
+  }
+
   playerUrl(id, region) {
     return `${this.base}/player?id=${id}&region=${region}`;
   }

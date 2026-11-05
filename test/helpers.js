@@ -58,7 +58,8 @@ function signupsOf(siteSignups, id) {
  * `siteTourneys` is the site's tourneys by id, `siteSignups` their sign-ups by id. `members` are the
  * server's members (`{ user: { id }, roles }`), changed by the role calls; `tiers` the site's
  * `/api/tiers` answer by player id, `titles` its `/api/titles` list by region, `lobbies` its
- * `/api/lobbies` list by region (changed by the test between runs).
+ * `/api/lobbies` list by region (changed by the test between runs), `duels` its duels by region (any
+ * order: listed newest first, 30 a page).
  */
 export function installFetch({
   closedDms = new Set(),
@@ -72,6 +73,7 @@ export function installFetch({
   tiers = new Map(),
   titles = {},
   lobbies = {},
+  duels = {},
 } = {}) {
   const calls = [];
   let nextId = 5000;
@@ -152,6 +154,11 @@ export function installFetch({
       if (url.pathname === "/api/lobbies") {
         if (siteDown) return reply({ error: "internal" }, 500);
         return reply({ region: url.searchParams.get("region"), lobbies: lobbies[url.searchParams.get("region")] ?? [] });
+      }
+      if (url.pathname === "/api/duels") {
+        if (siteDown) return reply({ error: "internal" }, 500);
+        const list = [...(duels[url.searchParams.get("region")] ?? [])].sort((a, b) => b.id - a.id);
+        return reply({ region: url.searchParams.get("region"), hasMore: list.length > 30, duels: list.slice(0, 30) });
       }
       if (url.pathname === "/api/titles") return reply({ region: url.searchParams.get("region"), titles: titles[url.searchParams.get("region")] ?? [] });
       const pub = /^\/api\/tourneys\/(\d+)$/.exec(url.pathname);
