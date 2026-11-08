@@ -272,7 +272,7 @@ export default {
     if (minute % 5 === 2) {
       await postResults(env, discord, site, budget).catch((e) => console.error("results", e));
       // Duels are rated as staff save them: posted on the same beat, before the rank-ups they cause.
-      await postDuels(env, discord, site, budget).catch((e) => console.error("duels", e));
+      await postDuels(env, discord, site, budget, now).catch((e) => console.error("duels", e));
     }
     if (minute % refreshMinutes(env) === 0) {
       await refreshBoards(env, discord, site, budget).catch((e) => console.error("boards", e));
