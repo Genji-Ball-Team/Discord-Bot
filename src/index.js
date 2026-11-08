@@ -9,7 +9,7 @@ import { Discord, EPHEMERAL, InteractionType, NO_PINGS, ResponseType, lostAccess
 import { parseButton, renderLeaderboard } from "./leaderboard.js";
 import { postDuels } from "./duels.js";
 import { refreshLobbyStatus } from "./lobbies.js";
-import { leaderboardRoles, link, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
+import { leaderboardEmojis, leaderboardRoles, link, listTitles, rankMinutes, ranksPending, runRanks, unlink } from "./ranks.js";
 import { postResults } from "./results.js";
 import { AUTOCOMPLETE_TIMEOUT_MS, Site } from "./site.js";
 import { autocompletePlayers, renderStats, resolvePlayer } from "./stats.js";
@@ -41,7 +41,7 @@ export function optionsOf(data) {
 
 const refreshMinutes = (env) => minutes(env.LEADERBOARD_REFRESH_MINUTES);
 /** What every leaderboard render needs from here: the roles its ranks and titles show as. */
-const boardOptions = (env, extra = {}) => ({ roles: leaderboardRoles(env), ...extra });
+const boardOptions = (env, extra = {}) => ({ roles: leaderboardRoles(env), emojis: leaderboardEmojis(env), ...extra });
 /** The live leaderboard's message: EU page 1. */
 const liveBoard = async (env, site) =>
   (await renderLeaderboard(site, "eu", 1, boardOptions(env, { live: true, refreshMinutes: refreshMinutes(env) }))).message;

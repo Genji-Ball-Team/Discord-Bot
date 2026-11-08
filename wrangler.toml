@@ -81,6 +81,10 @@ DEMIGOD_ROLE_IDS = "eu=1562890585021612052, na=1562890626087780473"
 # The role God and Demigod show as on the leaderboards, title=role id: one for both regions, only
 # shown there. Empty: the title is written out.
 LEADERBOARD_TITLE_ROLES = "God=1512571159755886833, Demigod=1512570886811811840"
+# Each rank's and title's icon on the leaderboards, label=custom emoji id (type \:God: in Discord to
+# see <:God:id>). Shown after the rank's role; God and Demigod show their title's icon instead and keep
+# their rank's role. Empty: no icons. A title without an icon shows its LEADERBOARD_TITLE_ROLES role.
+LEADERBOARD_EMOJIS = ""
 # Where a climb to a higher tier is posted ("**Name** has ranked up to **Champion** 🏆"). Empty: not posted.
 RANKUP_CHANNEL_ID = "1535559725209616434"
 # How often the rank roles are checked, in minutes (1–60).

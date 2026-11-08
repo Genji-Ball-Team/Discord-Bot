@@ -3,7 +3,7 @@ import { test } from "node:test";
 import worker from "../src/index.js";
 import { Discord } from "../src/discord.js";
 import { renderLeaderboard } from "../src/leaderboard.js";
-import { leaderboardRoles, link, rankOf, runRanks, unlink } from "../src/ranks.js";
+import { leaderboardEmojis, leaderboardRoles, link, rankOf, runRanks, unlink } from "../src/ranks.js";
 import { Site } from "../src/site.js";
 import { ENV, fakeD1, installFetch } from "./helpers.js";
 
@@ -242,14 +242,35 @@ test("/gr leaderboard: ranks as their roles, God and Demigod in their place with
   const { message } = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e) });
   const lines = message.embeds[0].description.split("\n");
   assert.equal(lines.length, 20);
-  assert.equal(lines[0], "` 1.` **Fealthy** — <@&31> · 2000 Elo");
-  assert.equal(lines[1], "` 2.` **Ipseity** — <@&13> · 1990 Elo");
-  assert.equal(lines[2], "` 3.` **Player3** — <@&30> · 1980 Elo");
+  assert.equal(lines[0], "` 1.` **Fealthy** · 2000 Elo — <@&31>");
+  assert.equal(lines[1], "` 2.` **Ipseity** · 1990 Elo — <@&13>");
+  assert.equal(lines[2], "` 3.` **Player3** · 1980 Elo — <@&30>");
   assert.deepEqual(message.allowed_mentions, { parse: [] });
 
   // Page 2 goes on from 21; a tier without a role is written out.
   const two = await renderLeaderboard(new Site(e), "eu", 2, { roles: new Map([["Master", "12"]]) });
-  assert.match(two.message.embeds[0].description.split("\n")[0], /^`21\.` \*\*Player21\*\* — Grandmaster ·/);
+  assert.match(two.message.embeds[0].description.split("\n")[0], /^`21\.` \*\*Player21\*\* · \d+ Elo — Grandmaster$/);
+});
+
+test("/gr leaderboard with icons: each rank's icon after its role, God and Demigod keep their rank's role with the title's icon", async () => {
+  const e = env({ LEADERBOARD_TITLE_ROLES: "God=30, Demigod=31", LEADERBOARD_EMOJIS: "God=40, Demigod=41, Grandmaster=42" });
+  installFetch({
+    titles: {
+      eu: [
+        { title: "God", rank: 3, id: 3, name: "Player3", rating: 1980 },
+        { title: "Demigod", rank: 1, id: 1, name: "Fealthy", rating: 2000 },
+      ],
+    },
+  });
+  const { message } = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e), emojis: leaderboardEmojis(e) });
+  const lines = message.embeds[0].description.split("\n");
+  assert.equal(lines[0], "` 1.` **Fealthy** · 2000 Elo — <@&13> <:Demigod:41>");
+  assert.equal(lines[1], "` 2.` **Ipseity** · 1990 Elo — <@&13> <:Grandmaster:42>");
+  assert.equal(lines[2], "` 3.` **Player3** · 1980 Elo — <@&13> <:God:40>");
+
+  // A title without an icon shows its role, as before.
+  const noIcon = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e), emojis: new Map([["God", "40"]]) });
+  assert.equal(noIcon.message.embeds[0].description.split("\n")[0], "` 1.` **Fealthy** · 2000 Elo — <@&31>");
 });
 
 test("leaderboardRoles: the rank roles, Unranked's, and one role per title", () => {
