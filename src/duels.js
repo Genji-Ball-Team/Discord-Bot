@@ -28,6 +28,21 @@ function change(side) {
   return Math.round(side.ratingAfter) - Math.round(side.ratingBefore);
 }
 
+/**
+ * How long a rated duel whose ratings the site hasn't written yet is held back. The site rates
+ * duels as they're saved, and its cron catches any it missed within about 10 minutes; past this, the
+ * line is posted as it is.
+ */
+const PENDING_WAIT_MS = 30 * 60 * 1000;
+
+/** A rated duel the site hasn't put ratings on yet (still being rated), and not too old to wait for. */
+function pending(duel, now) {
+  if (duel.rated === false) return false;
+  const rated = (side) => side?.ratingAfter !== null && side?.ratingAfter !== undefined;
+  if (rated(duel.winner) && rated(duel.loser)) return false;
+  return now - Date.parse(duel.playedAt) < PENDING_WAIT_MS;
+}
+
 /** One duel's line, from `/api/duels`. */
 export function duelLine(region, duel) {
   const won = change(duel.winner);
@@ -67,7 +82,7 @@ async function removeVoided(env, discord, voided) {
 }
 
 /** One region: post its new duels and take out the voided ones. */
-async function regionDuels(env, discord, site, channelId, region) {
+async function regionDuels(env, discord, site, channelId, region, now) {
   const data = await site.duels(region);
   if (!data) return;
   const duels = data.duels ?? [];
@@ -90,6 +105,9 @@ async function regionDuels(env, discord, site, channelId, region) {
   if (data.hasMore) await env.DB.prepare("DELETE FROM duel_posts WHERE region = ? AND duel_id < ?").bind(region, oldest).run();
 
   const fresh = duels.filter((d) => d.id > Number(cursor)).sort((a, b) => a.id - b.id);
+  // A duel still being rated waits, and so do the ones after it, so lines go out in order.
+  const wait = fresh.findIndex((d) => pending(d, now));
+  if (wait >= 0) fresh.splice(wait);
   for (const group of chunks(fresh.map((d) => duelLine(region, d)))) {
     const sent = await discord.sendMessage(channelId, message(group)).catch((e) => {
       if (!lostAccess(e)) throw e;
@@ -103,17 +121,17 @@ async function regionDuels(env, discord, site, channelId, region) {
     );
     await setState(env, key, ids.at(-1));
   }
-  // Nothing was left to post (or none could be): move on past what was listed.
-  if (!fresh.length) await setState(env, key, newest);
+  // Nothing was left to post (or none could be): move on past what was listed, unless one waits.
+  if (!fresh.length && wait < 0) await setState(env, key, newest);
 }
 
 /** On the cron: each region's new duels, while the run's request budget lasts. */
-export async function postDuels(env, discord, site, budget) {
+export async function postDuels(env, discord, site, budget, now = Date.now()) {
   const channelId = setting(env, "DUELS_CHANNEL_ID");
   if (!channelId) return;
   for (const region of Object.keys(REGIONS)) {
     // A site read, a few posts and edits.
     if (budget() < 6) return;
-    await regionDuels(env, discord, site, channelId, region);
+    await regionDuels(env, discord, site, channelId, region, now);
   }
 }

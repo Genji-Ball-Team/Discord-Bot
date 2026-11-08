@@ -107,3 +107,33 @@ test("duels: off without DUELS_CHANNEL_ID, and a site error posts nothing", asyn
   await cron(e);
   assert.equal(posts(calls).length, 0);
 });
+
+test("duels: a rated duel the site hasn't rated yet waits, with the ones after it, then posts with its changes", async () => {
+  const e = env();
+  const duels = { eu: [], na: [] };
+  const calls = installFetch({ duels });
+  await cron(e);
+  const unrated = { ...duel(1, "Drexico", "MooSnuckle", 9), winner: side(1, "Drexico", 1187, null), loser: side(2, "MooSnuckle", 960, null) };
+  duels.eu.push(unrated, duel(2, "A", "B"));
+  await cron(e, 7);
+  assert.equal(posts(calls).length, 0);
+
+  duels.eu[0] = duel(1, "Drexico", "MooSnuckle", 9);
+  await cron(e, 12);
+  assert.equal(posts(calls).length, 1);
+  assert.equal(
+    posts(calls)[0].body.content,
+    "⚔️ EU · **Drexico** beat **MooSnuckle** 15–9 · **+11** / **−11**\n⚔️ EU · **A** beat **B** 15–8 · **+11** / **−11**",
+  );
+});
+
+test("duels: one still without ratings after half an hour is posted as it is", async () => {
+  const e = env();
+  const duels = { eu: [], na: [] };
+  const calls = installFetch({ duels });
+  await cron(e);
+  duels.eu.push({ ...duel(1, "A", "B"), winner: side(1, "A", 1000, null), loser: side(2, "B", 1000, null) });
+  await cron(e, 32);
+  assert.equal(posts(calls).length, 1);
+  assert.match(posts(calls)[0].body.content, /not rated$/);
+});
