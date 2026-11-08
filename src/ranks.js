@@ -229,6 +229,12 @@ export function leaderboardRoles(env) {
   ]);
 }
 
+/**
+ * Each rank's and title's icon on the leaderboards, by label: LEADERBOARD_EMOJIS, `label=emoji id`
+ * (the server's custom emojis; `\:God:` in Discord shows `<:God:id>`).
+ */
+export const leaderboardEmojis = (env) => new Map(pairs(env.LEADERBOARD_EMOJIS));
+
 const CANT_CHANGE_ROLES =
   "I can't change their roles. In **Server Settings → Roles**, drag my role above the rank roles and give it **Manage Roles**. " +
   "(Nobody can change the server owner's roles.)";

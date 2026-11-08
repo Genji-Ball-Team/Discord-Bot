@@ -79,7 +79,7 @@ It needs two things in Discord: **Server Members Intent** on (Developer Portal â
 
 The 1v1 tourney's winner is **God** and the runner-up **Demigod** (at most 1 and 3 per region). They're titles, not ranks: Staff give the roles in `GOD_ROLE_IDS` and `DEMIGOD_ROLE_IDS` by hand, one per region, and the player keeps their rank role too. The bot only reads them, for linked members, at each check:
 
-- `/gr leaderboard` and the live leaderboard keep them in their place by Elo, with the God or Demigod role of `LEADERBOARD_TITLE_ROLES` where everyone else has their rank role. These are one role per title, for both regions, only shown on the leaderboards.
+- `/gr leaderboard` and the live leaderboard keep them in their place by Elo. With an icon for their title in `LEADERBOARD_EMOJIS`, they keep their rank role and show the title's icon where everyone else has their rank's icon. Without one, they show the God or Demigod role of `LEADERBOARD_TITLE_ROLES` instead of their rank role. These are one role per title, for both regions, only shown on the leaderboards.
 - genjiball.us lists them above everyone on its leaderboard (God white, Demigod dark red): it reads them from the bot's `GET /titles` (genjiball-ranked `src/site/titles.ts`).
 - The game doesn't change: its top 10 and rank tags stay the real ratings.
 
@@ -141,6 +141,7 @@ Settings are `[vars]` in `wrangler.toml` (each has a comment there). Empty means
 | `RANK_ROLES`, `UNRANKED_ROLE_ID` | The rank roles, lowest tier first, and the role below the first tier |
 | `GOD_ROLE_IDS`, `DEMIGOD_ROLE_IDS` | The titles, `region=role id` |
 | `LEADERBOARD_TITLE_ROLES` | The role God and Demigod show as on the leaderboards, `title=role id` |
+| `LEADERBOARD_EMOJIS` | Each rank's and title's icon on the leaderboards, `label=custom emoji id` (empty: no icons) |
 | `TOURNEY_REFRESH_MINUTES`, `CONFIRM_MINUTES`, `LEADERBOARD_REFRESH_MINUTES`, `RANK_REFRESH_MINUTES` | Minutes (1 to 60, 5 if missing) |
 
 Secrets: `DISCORD_TOKEN` and `SITE_TOKEN` (optional). Bindings: `DB` (D1) and `BROWSER`.
