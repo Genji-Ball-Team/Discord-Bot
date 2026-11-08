@@ -84,7 +84,7 @@ LEADERBOARD_TITLE_ROLES = "God=1512571159755886833, Demigod=1512570886811811840"
 # Each rank's and title's icon on the leaderboards, label=custom emoji id (type \:God: in Discord to
 # see <:God:id>). Shown after the rank's role; God and Demigod show their title's icon instead and keep
 # their rank's role. Empty: no icons. A title without an icon shows its LEADERBOARD_TITLE_ROLES role.
-LEADERBOARD_EMOJIS = "God=1568897660100808825, Demigod=1568897784784883742, Sovereign=1568917279486255185, Ascendant=1568917459862290592, Grandmaster=1568917528711929928, Master=1568917638267273327, Apprentice=1568917707703844874, Rookie=1568917787341103184"
+LEADERBOARD_EMOJIS = "God=1568897660100808825, Demigod=1568897784784883742, Sovereign=1568917279486255185, Champion=1568917389272293377, Ascendant=1568917459862290592, Grandmaster=1568917528711929928, Master=1568917638267273327, Apprentice=1568917707703844874, Rookie=1568917787341103184"
 # Where a climb to a higher tier is posted ("**Name** has ranked up to **Champion** 🏆"). Empty: not posted.
 RANKUP_CHANNEL_ID = "1535559725209616434"
 # How often the rank roles are checked, in minutes (1–60).
