@@ -264,9 +264,9 @@ test("/gr leaderboard with icons: each rank's icon after its role, God and Demig
   });
   const { message } = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e), emojis: leaderboardEmojis(e) });
   const lines = message.embeds[0].description.split("\n");
-  assert.equal(lines[0], "` 1.` <:Demigod:41> **Fealthy** · 2000 — <@&13>");
-  assert.equal(lines[1], "` 2.` <:Grandmaster:42> **Ipseity** · 1990 — <@&13>");
-  assert.equal(lines[2], "` 3.` <:God:40> **Player3** · 1980 — <@&13>");
+  assert.equal(lines[0], "` 1.` **Fealthy** · 2000 — <@&13> <:Demigod:41>");
+  assert.equal(lines[1], "` 2.` **Ipseity** · 1990 — <@&13> <:Grandmaster:42>");
+  assert.equal(lines[2], "` 3.` **Player3** · 1980 — <@&13> <:God:40>");
 
   // A title without an icon shows its role, as before.
   const noIcon = await renderLeaderboard(new Site(e), "eu", 1, { roles: leaderboardRoles(e), emojis: new Map([["God", "40"]]) });

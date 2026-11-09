@@ -1,7 +1,7 @@
 // The leaderboard message: the top 20, EU and NA tabs and a link to the whole leaderboard on the site
-// (/gr leaderboard's page option shows the next 20s, up to page 5). Each row is the rank's icon
-// (LEADERBOARD_EMOJIS), the name, the Elo, then the rank as a mention of its role (Discord colours
-// it, and it pings nobody). The Elo comes before the rank so it stays next to the name. The region's
+// (/gr leaderboard's page option shows the next 20s, up to page 5). Each row is the name, the Elo,
+// then the rank as a mention of its role (Discord colours it, and it pings nobody) and the rank's
+// icon (LEADERBOARD_EMOJIS). The Elo comes before the rank so it stays next to the name. The region's
 // God and Demigod (the 1v1 tourney's titles, src/ranks.js) keep their rank's role and show their
 // title's icon instead; a title without an icon shows its title's role, as before the icons.
 
@@ -42,9 +42,9 @@ function formatLines(players, titles, roles, emojis) {
     // A title with an icon: the rank's role and the title's icon. Without one: the title's role.
     const rank = title && !titleIcon ? title : tier;
     const icon = titleIcon || (rank === "Unranked" ? "" : iconOf(rank, emojis));
-    // The icon goes first and the Elo has no unit, so a row fits on a phone: at the end of a long
-    // row the icon wrapped onto a line of its own.
-    return `${place}${icon ? ` ${icon}` : ""} **${escapeMarkdown(name)}** · ${Math.round(p.rating)} — ${shownRank(rank, roles)}`;
+    // The Elo has no unit (the title says "by Elo") so a row fits on a phone: with it, the icon at
+    // the end of a long row wrapped onto a line of its own.
+    return `${place} **${escapeMarkdown(name)}** · ${Math.round(p.rating)} — ${shownRank(rank, roles)}${icon ? ` ${icon}` : ""}`;
   });
 }
 
